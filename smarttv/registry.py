@@ -11,11 +11,13 @@ from __future__ import annotations
 from .backends.base import BackendUnavailable, Capability, TVError, UnsupportedCommand
 from .backends.cec import CECBackend
 from .backends.dummy import DummyBackend
+from .backends.ir import IRBackend
 from .backends.samsung import SamsungBackend
 from .backends.webos import WebOSBackend
 
 BACKEND_CLASSES = {
     "cec": CECBackend,
+    "ir": IRBackend,
     "samsung": SamsungBackend,
     "webos": WebOSBackend,
     "dummy": DummyBackend,

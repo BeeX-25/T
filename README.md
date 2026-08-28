@@ -1,192 +1,265 @@
-# SmartTV Bridge — حوّل أي تلفاز إلى تلفاز ذكي برمجياً
+# SmartTV Bridge — حوّل تلفازك إلى نظام ذكي بجوال قديم
 
-خدمة صغيرة بلغة **Python** بدون أي مكتبة خارجية، تحوّل أي تلفاز فيه منفذ HDMI
-إلى نظام ذكي: ريموت من الجوال، تشغيل يوتيوب والروابط على الشاشة، مؤقّت نوم،
-وأتمتة بمواعيد — **بدون شراء أجهزة بث غالية**.
+خدمة **Python بدون أي مكتبة خارجية** تعطيك: ريموت من الجوال، ومكتبة قنوات
+وأفلام ومسلسلات قابلة للبحث، وتشغيلاً على شاشة التلفاز، وأتمتة بمواعيد —
+وتعمل على **جوال أندرويد** (Termux) أو راسبيري باي أو أي حاسوب قديم.
 
-## الفكرة باختصار
+---
 
-كل تلفاز فيه HDMI يدعم بروتوكول **HDMI-CEC** (الشركات تسمّيه بأسماء تجارية:
-Anynet+ عند سامسونج، SimpLink عند LG، Bravia Sync عند سوني، Viera Link عند
-باناسونيك). هذا البروتوكول يمشي داخل **كبل HDMI نفسه**، ويسمح لأي جهاز موصول
-بأن يشغّل التلفاز ويطفئه ويتحكّم بالصوت ويرسل أزرار الريموت.
+## أولاً: ما الذي تحتاجه فعلاً؟ (بصراحة)
 
-فالمطلوب ليس جهازاً جديداً، بل جهاز حاسوب قديم موصول بالـ HDMI + هذه الخدمة:
+الفيديو لا يصل إلى تلفاز غير ذكي إلا عبر شيء موصول بمنفذ HDMI — هذه حقيقة
+فيزيائية لا يلتفّ عليها أي برنامج. لكن هذا "الشيء" غالباً موجود عندك:
 
-```
-جوالك ──HTTP──▶ SmartTV Bridge ──HDMI-CEC──▶ التلفاز (تشغيل/إطفاء/أزرار/صوت)
-   (ريموت)      (على جهاز رخيص)  ──mpv────▶ يوتيوب وروابط الفيديو على الشاشة
-                                 ──WiFi───▶ سامسونج/LG الشبكية (اختياري)
-```
-
-## ماذا تحتاج
-
-| الخيار | التكلفة | ملاحظات |
+| حالتك | ما تحتاجه | ماذا تحصل |
 | --- | --- | --- |
-| لابتوب قديم / حاسوب مكتبي قديم | صفر غالباً | الأسهل، وكل شيء يشتغل عليه فوراً |
-| Raspberry Pi (أي إصدار فيه HDMI) | رخيص | الـ CEC مدمج فيه بدون أي إضافة |
-| صندوق أندرويد قديم / Mini PC | صفر إن كان موجوداً | شغّل عليه لينكس أو Termux |
+| **جوال أندرويد قديم** (ولو مكسور الشاشة) | كبل/محوّل USB‑C → HDMI (بسعر وجبة) | كل شيء: بث + ريموت + مكتبة |
+| **جوالك فيه بليستر IR** (شاومي/ريدمي/بوكو وكثير من هواوي) | لا شيء إطلاقاً | تحكم كامل بالتلفاز (تشغيل/صوت/قنوات/أزرار) — بدون بث |
+| **تلفازك ذكي أصلاً** (سامسونج/LG) لكن ريموته ضاع أو تريد أتمتته | لا شيء، فقط واي فاي | تحكم كامل عبر الشبكة + تشغيل التطبيقات |
+| **مستقبِل/رسيفر أو صندوق أندرويد قديم** موصول أصلاً | لا شيء | تحكم عبر HDMI‑CEC + مكتبة |
+| لا هذا ولا ذاك | جوال أندرويد مستعمل رخيص | أرخص "صندوق بث" ممكن |
 
-إضافة لذلك: كبل HDMI (موجود أصلاً)، وشبكة واي فاي واحدة تجمع الجوال بالجهاز.
-إن كان جهازك لا يدعم CEC (بعض كروت الشاشة في اللابتوبات لا تدعمه)، فمحوّل
-USB‑CEC رخيص يحلّها، أو استخدم واجهة الشبكة إن كان تلفازك سامسونج/LG حديث.
+> ملاحظة مهمة: بعض الجوالات لا تُخرج صورة عبر USB‑C (تحتاج دعم DisplayPort
+> Alt Mode). تحقّق من موديل جوالك قبل شراء المحوّل. وإن كان تلفازك يدعم
+> Miracast، يمكنك العرض لاسلكياً من الجوال بدون كبل أصلاً.
 
-المتطلبات البرمجية: `python3` فقط للخدمة، و`cec-utils` للتحكم بالتلفاز،
-و`mpv` + `yt-dlp` لتشغيل يوتيوب والروابط.
+كل واحدة من هذه الحالات لها "واجهة" جاهزة في المشروع، والخدمة تختار
+تلقائياً أول واجهة متاحة تدعم الأمر المطلوب:
 
-## التثبيت السريع
-
-```bash
-git clone <هذا المستودع> smarttv && cd smarttv
-
-# على راسبيري باي أو أي نظام ديبيان/أوبنتو:
-sudo sh scripts/install.sh          # يثبّت الحزم + خدمة systemd تعمل عند الإقلاع
-
-# أو يدوياً بدون تثبيت:
-sudo apt install cec-utils mpv yt-dlp
-cp config.example.json config.json
-python3 -m smarttv --config config.json
+```
+جوالك ──HTTP──▶ الخدمة (على جوال قديم أو أي جهاز)
+                   ├── ir       → أشعة تحت حمراء من بليستر الجوال (بدون أي كبل)
+                   ├── cec      → عبر كبل HDMI نفسه (تشغيل/إطفاء/أزرار)
+                   ├── samsung  → واي فاي (Tizen)
+                   ├── webos    → واي فاي (LG)
+                   └── player   → VLC على الأندرويد أو mpv على اللينكس
 ```
 
-ثم افتح من جوالك: `http://IP-الجهاز:8099` وأضف الصفحة إلى الشاشة الرئيسية
-لتصير كتطبيق ريموت كامل.
+---
 
-للتجربة على أي جهاز بدون تلفاز موصول:
+## التثبيت على جوال أندرويد (الطريق الموصى به)
 
-```bash
-python3 -m smarttv --demo          # تلفاز وهمي في الذاكرة، الواجهة تعمل كاملة
-```
-
-## الاستعمال من سطر الأوامر
+1. ثبّت من **F‑Droid** (وليس متجر جوجل): تطبيق **Termux**، ومعه
+   **Termux:API** (للأشعة وللصوت)، و**Termux:Boot** (للتشغيل التلقائي).
+2. افتح Termux ونفّذ:
 
 ```bash
-python3 -m smarttv --cmd power on           # تشغيل التلفاز
-python3 -m smarttv --cmd power off
-python3 -m smarttv --cmd key home           # أزرار: up/down/left/right/select/back/home/info…
-python3 -m smarttv --cmd volume up
-python3 -m smarttv --cmd source 2           # التحويل إلى HDMI 2
-python3 -m smarttv --cmd cast "https://youtu.be/..."
-python3 -m smarttv --cmd sleep 45           # مؤقت نوم بالدقائق
-python3 -m smarttv --cmd status
-python3 -m smarttv --discover               # ابحث عن التلفازات في الشبكة
-python3 -m smarttv --cmd raw "tx 40:44:41"  # إطار CEC خام لمن يريد التوسّع
+pkg install git
+git clone <رابط هذا المستودع> smarttv && cd smarttv
+sh scripts/install_termux.sh
 ```
 
-هذا يجعل التلفاز قابلاً للبرمجة من أي سكربت أو cron أو Home Assistant.
-
-## واجهة HTTP
-
-كل شيء متاح كـ JSON على نفس المنفذ، فتستطيع ربطه بأي شيء:
-
-| الطريقة | المسار | الجسم |
-| --- | --- | --- |
-| GET | `/api/status` | حالة التلفاز والمشغّل والمؤقتات |
-| GET | `/api/config` | الاختصارات والواجهات المتاحة |
-| GET | `/api/discover` | مسح SSDP للشبكة |
-| POST | `/api/power` | `{"state": "on" \| "off" \| "toggle"}` |
-| POST | `/api/volume` | `{"action": "up" \| "down" \| "mute", "repeat": 3}` |
-| POST | `/api/key` | `{"key": "up", "repeat": 1}` |
-| POST | `/api/source` | `{"index": 2}` |
-| POST | `/api/app` | `{"app": "youtube"}` (سامسونج/LG فقط) |
-| POST | `/api/cast` | `{"url": "https://…"}` |
-| POST | `/api/player` | `{"action": "toggle" \| "seek" \| "stop", "value": 30}` |
-| POST | `/api/sleep` | `{"minutes": 45}` — و`DELETE` للإلغاء |
-
-مثال:
+3. عدّل `~/.smarttv/config.json`: فعّل `tv.ir` واختر ماركة تلفازك، أو فعّل
+   `samsung`/`webos` إن كان تلفازك ذكياً.
+4. شغّل الخدمة:
 
 ```bash
-curl -X POST localhost:8099/api/cast -d '{"url":"https://youtu.be/jNQXAC9IVRw"}'
+termux-wake-lock && python3 -m smarttv --config ~/.smarttv/config.json
 ```
 
-الردّ دائماً `{"ok": true, "data": …}` أو `{"ok": false, "error": "…"}`.
-لحماية الواجهة ضع `auth_token` في الإعدادات، وأدخِله من زر ⚙ في صفحة الريموت.
+5. افتح من أي جوال على نفس الشبكة: `http://IP-الجوال:8099` وأضف الصفحة إلى
+   الشاشة الرئيسية لتعمل كتطبيق.
 
-## الأتمتة
+**لعرض الصورة على التلفاز:** وصّل الجوال بالتلفاز عبر USB‑C → HDMI، وحين
+تضغط أي عنصر في المكتبة سيفتح في VLC على شاشة التلفاز مباشرة.
 
-في `config.json`، كل قاعدة عبارة عن تعبير cron وأمر:
+### على راسبيري باي أو حاسوب لينكس
+
+```bash
+sudo sh scripts/install.sh     # يثبّت cec-utils و mpv وخدمة systemd
+```
+
+### للتجربة بدون أي جهاز
+
+```bash
+python3 -m smarttv --demo      # تلفاز وهمي، الواجهة تعمل بالكامل
+```
+
+---
+
+## المكتبة: القنوات والأفلام والمسلسلات
+
+المشروع **لا يحتوي على أي محتوى ولا يوفّر مصادر**، بل يقرأ الصيغ المفتوحة
+التي يستعملها العالم كله: **M3U** للقوائم و**XMLTV** لدليل البرامج. أنت
+تختار المصادر في `config.json`، وهي عادة أحد ثلاثة:
+
+1. **قنوات مفتوحة مجاناً (Free‑to‑Air):** مشروع `iptv-org` يفهرس بثوث
+   القنوات المتاحة للعموم، مثل:
+   `https://iptv-org.github.io/iptv/languages/ara.m3u`
+   ودليل برامجها: `https://iptv-org.github.io/epg/guides/ar.xml`
+2. **اشتراك تدفعه أنت:** أي مزوّد يعطيك رابط M3U — ضعه كما هو.
+3. **مكتبتك الخاصة:** ملفاتك على القرص أو مخدم Jellyfin/Plex، صدّرها كملف
+   M3U وأشِر إليه بـ `path`.
 
 ```json
-"automation": {
-  "sleep_timer_minutes": 45,
-  "rules": [
-    { "name": "إطفاء بعد منتصف الليل", "cron": "0 2 * * *", "action": "power_off" },
-    { "name": "أخبار الصباح", "cron": "30 7 * * 1-5", "action": "cast:https://youtu.be/…" }
+"catalog": {
+  "sources": [
+    { "name": "قنوات عربية", "type": "m3u",   "kind": "live",   "url": "https://iptv-org.github.io/iptv/languages/ara.m3u" },
+    { "name": "دليل البرامج", "type": "xmltv",                    "url": "https://iptv-org.github.io/epg/guides/ar.xml" },
+    { "name": "أفلامي",      "type": "m3u",   "kind": "movies", "path": "~/media/movies.m3u" },
+    { "name": "مسلسلاتي",    "type": "m3u",   "kind": "series", "path": "~/media/series.m3u" }
   ]
 }
 ```
 
-الأوامر المتاحة: `power_on` و`power_off` و`stop` و`key:<اسم الزر>` و
-`volume:<up|down|mute>` و`source:<رقم>` و`cast:<رابط>` و`notify:<رسالة>`.
+ما تحصل عليه في الواجهة: تبويبات (مباشر / أفلام / مسلسلات / المفضلة / أكمل
+المشاهدة)، بحث فوري، تصنيف حسب المجموعات، شعارات القنوات، تجميع حلقات
+المسلسل تحت اسم واحد (يفهم `S01E02` و«الحلقة ١٢»)، ومتابعة من حيث توقفت.
 
-## تلفازات سامسونج و LG الشبكية (اختياري)
+> أنت المسؤول عن قانونية المصادر التي تضيفها؛ المشروع لا يوزّع محتوى ولا
+> يفكّ حماية ولا يفهرس مصادر مقرصنة.
 
-إن كان تلفازك ذكياً أصلاً لكن ريموته ضاع أو تريد التحكم به برمجياً، فعّل
-الواجهة المناسبة في `config.json`:
+---
 
-```bash
-pip3 install samsungtvws     # سامسونج Tizen (2016 فما فوق)
-pip3 install pywebostv       # LG webOS
+## التحكم بالأشعة تحت الحمراء (بدون أي جهاز)
+
+إن كان جوالك فيه بليستر IR فهو ريموت كامل. فعّل في الإعدادات:
+
+```json
+"ir": { "enabled": true, "brand": "samsung" }
 ```
 
-المكتبتان تُحمّلان عند الحاجة فقط، والخدمة تعمل بدونهما. عند تفعيل أكثر من
-واجهة، يجرّب النظام كل واحدة بالترتيب المذكور في `tv.order` ويختار أول واجهة
-تدعم الأمر المطلوب — أي أن زر الصوت قد يذهب عبر CEC وزر تشغيل التطبيقات عبر
-الشبكة، دون أن تنتبه أنت لذلك.
+الماركات المدمجة: `samsung` و`lg` و`sony` و`philips` و`generic_nec`.
+البروتوكولات مبنيّة من توقيتاتها المنشورة (NEC، Samsung32، SIRC، RC5)، فإن
+لم يستجب زر معيّن في موديلك أضف أكوادك الخاصة:
+
+```json
+"ir": {
+  "enabled": true,
+  "brand": "my_tv",
+  "brands": {
+    "my_tv": { "protocol": "nec", "address": 4, "keys": { "power": 8, "volume_up": 2 } }
+  }
+}
+```
+
+ومن عنده جهاز LIRC يستطيع استبدال أمر الإرسال كاملاً:
+`"command": "irsend SEND_ONCE tv {key}"`.
+
+**حدّ صريح:** الأشعة اتجاه واحد — لا يمكنها قراءة حالة التلفاز أبداً. لذلك
+هذه الواجهة لا تعلن دعم `power_status`، وتبقى قراءة الحالة من نصيب CEC أو
+الشبكة عند توفرها.
+
+---
+
+## سطر الأوامر
+
+```bash
+python3 -m smarttv --cmd power on
+python3 -m smarttv --cmd key home
+python3 -m smarttv --cmd volume up
+python3 -m smarttv --cmd cast "https://youtu.be/..."
+python3 -m smarttv --cmd search الجزيرة      # بحث في المكتبة
+python3 -m smarttv --cmd refresh             # إعادة تحميل القوائم
+python3 -m smarttv --cmd sleep 45            # مؤقّت نوم
+python3 -m smarttv --discover                # ابحث عن تلفازات في الشبكة
+```
+
+## واجهة HTTP
+
+| الطريقة | المسار | الوظيفة |
+| --- | --- | --- |
+| GET | `/api/status` | حالة التلفاز والمشغّل والمكتبة والمؤقتات |
+| GET | `/api/config` | الاختصارات والواجهات وقدرات المشغّل |
+| POST | `/api/power` · `/api/volume` · `/api/key` · `/api/source` | التحكم |
+| POST | `/api/app` | تشغيل تطبيق (سامسونج/LG) |
+| POST | `/api/cast` | `{"url","name","kind","resume"}` |
+| POST | `/api/player` | `toggle` · `seek` · `stop` · `volume` |
+| GET | `/api/catalog` | `?kind=live&q=&group=&limit=&offset=` |
+| GET | `/api/series` | المسلسلات مجمّعة بحلقاتها |
+| POST | `/api/catalog/refresh` | إعادة تحميل المصادر |
+| GET | `/api/epg` | `?channel=tvg-id` — الآن والتالي |
+| GET/POST | `/api/favorites` | عرض/تبديل المفضلة |
+| GET | `/api/resume` | «أكمل المشاهدة» والسجل |
+| POST/DELETE | `/api/sleep` | مؤقّت النوم |
+
+الردّ دائماً `{"ok": true, "data": …}` أو `{"ok": false, "error": "…"}`.
+لحماية الواجهة ضع `server.auth_token` وأدخِله من زر ⚙ في الصفحة.
+
+## الأتمتة
+
+```json
+"rules": [
+  { "cron": "0 2 * * *",     "action": "power_off" },
+  { "cron": "30 7 * * 1-5",  "action": "cast:https://…" }
+]
+```
+
+الأوامر: `power_on` · `power_off` · `stop` · `key:<زر>` · `volume:<up|down|mute>`
+· `source:<رقم>` · `cast:<رابط>` · `notify:<رسالة>`.
+
+---
+
+## ما الذي يعمل على كل جهاز (بدون مبالغة)
+
+| القدرة | جوال أندرويد (Termux) | لينكس / راسبيري باي |
+| --- | --- | --- |
+| تشغيل رابط على الشاشة | ✅ عبر VLC / YouTube | ✅ عبر mpv |
+| إيقاف مؤقت وتقديم | ⚠️ يحتاج روت أو ADB (`use_input_keyevents`) | ✅ كامل |
+| مستوى الصوت | ✅ عبر Termux:API | ✅ |
+| إيقاف التشغيل | ⚠️ بالعودة للشاشة الرئيسية | ✅ إغلاق فعلي |
+| متابعة من حيث توقفت | ⚠️ يديرها VLC نفسه | ✅ يخزّنها المشروع |
+| التحكم بالتلفاز | IR / CEC / شبكة | CEC / شبكة |
+
+أندرويد يمنع تطبيقاً من حقن أزرار في تطبيق آخر بدون صلاحية shell — لذلك
+تُعلن الواجهة عن `pause` و`seek` فقط عند تفعيل `use_input_keyevents`، بدل
+ادّعاء قدرة لا توجد.
 
 ## حلّ المشاكل
 
-- **لا يستجيب التلفاز:** فعّل CEC من إعدادات التلفاز (ابحث عن الاسم التجاري:
-  Anynet+ / SimpLink / Bravia Sync)، ثم جرّب `echo scan | cec-client -s -d 1`.
-- **`no CEC adapter found`:** الكبل غير موصول، أو منفذ HDMI الذي استعملته لا
-  يدعم CEC (جرّب منفذاً آخر — عادة HDMI 1)، أو جهازك يحتاج محوّل USB-CEC.
-- **الصوت لا يتغيّر:** كثير من التلفازات تمرّر أوامر الصوت إلى مكبّر خارجي
-  فقط. استعمل `key:volume_up` بدل `volume`، أو تحكّم بصوت المشغّل نفسه عبر
-  `/api/player` `{"action":"volume"}`.
-- **يوتيوب لا يعمل:** حدّث `yt-dlp` (`pip3 install -U yt-dlp`)، فمواقع البث
-  تغيّر واجهاتها باستمرار.
-- **الصفحة لا تفتح من الجوال:** تأكد أن الجهازين على نفس الشبكة، وأن جدار
-  الحماية يسمح بالمنفذ 8099.
+- **التلفاز لا يستجيب لـ CEC:** فعّل CEC من إعدادات التلفاز (Anynet+ /
+  SimpLink / Bravia Sync)، وجرّب `echo scan | cec-client -s -d 1`.
+- **`no CEC adapter found`:** جرّب منفذ HDMI آخر (عادة HDMI 1) أو محوّل USB‑CEC.
+- **الأشعة لا تعمل:** تأكد من تطبيق Termux:API ومن أن جوالك فيه بليستر
+  (`termux-infrared-frequencies`)، ومن اختيار الماركة الصحيحة.
+- **القنوات لا تفتح:** بعض البثوث تحتاج مشغّلاً يدعم HLS — استعمل VLC، أو
+  جرّب الرابط في المتصفح للتأكد أنه حيّ.
+- **يوتيوب لا يعمل على لينكس:** حدّث `yt-dlp`.
 
-## بنية المشروع
+## البنية
 
 ```
 smarttv/
-  __main__.py     واجهة سطر الأوامر ونقطة التشغيل
+  __main__.py     سطر الأوامر ونقطة التشغيل
   server.py       خادم HTTP بالمكتبة القياسية (API + صفحة الريموت)
-  api.py          طبقة الخدمة: جدول المسارات وقواعد التحقق
-  registry.py     اختيار الواجهة المناسبة لكل أمر مع التبديل التلقائي
-  backends/       cec (الأساس) · samsung · webos · dummy (للتجربة)
-  media.py        تشغيل الوسائط عبر mpv وواجهة IPC الخاصة به
+  api.py          طبقة الخدمة: المسارات والتحقق وتتبّع «أكمل المشاهدة»
+  registry.py     اختيار الواجهة المناسبة لكل أمر
+  backends/       cec · ir · samsung · webos · dummy
+  players/        mpv (لينكس) · android (Termux) خلف واجهة واحدة
+  catalog.py      قوائم M3U ودليل XMLTV وبحث وتجميع المسلسلات
+  store.py        المفضلة ومواضع المتابعة والسجل (كتابة ذرّية)
+  ircodes.py      توليد نبضات NEC / Samsung32 / SIRC / RC5
   automation.py   cron مصغّر + مؤقّت النوم
-  discovery.py    البحث عن الأجهزة عبر SSDP
-  keys.py         خريطة الأزرار الموحّدة بين كل الواجهات
-  web/            صفحة الريموت (تعمل كتطبيق PWA على الجوال)
+  keys.py         خريطة أزرار موحّدة بين كل الواجهات
+  web/            صفحة الريموت والمكتبة (PWA بالعربية)
 ```
 
 ## الاختبارات
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m unittest discover
 ```
 
-٨٨ اختباراً تعمل بلا تلفاز وبلا إنترنت وبلا أي مكتبة خارجية: تحليل مخرجات
-`cec-client`، بناء إطارات CEC، منطق التبديل بين الواجهات، تعابير cron،
-حماية المسارات في الخادم، والتحقق من الرمز السرّي.
+١٥٨ اختباراً تعمل بلا تلفاز وبلا إنترنت وبلا أي مكتبة خارجية: توليد نبضات
+الأشعة، تحليل مخرجات `cec-client`، قوائم M3U ودليل XMLTV، منطق اختيار
+الواجهات، تعابير cron، بناء نوايا أندرويد، حماية المسارات والرمز السرّي.
 
 ---
 
 ## English summary
 
-A dependency-free Python service that turns any HDMI TV into a smart TV
-without buying streaming hardware. It drives the TV over **HDMI-CEC** (the
-control channel already inside your HDMI cable) from any old laptop or
-Raspberry Pi, streams YouTube and video URLs to it through **mpv**, serves a
-phone-friendly web remote, and exposes the whole thing as a JSON API plus a
-CLI so it can be scripted or wired into Home Assistant. Optional
-network backends for Samsung Tizen and LG webOS are loaded lazily.
+A dependency-free Python service that turns a TV into a smart one using
+hardware you already own. Control goes over **HDMI-CEC**, over **infrared**
+from a phone's IR blaster (NEC / Samsung32 / SIRC / RC5 encoders included),
+or over Wi-Fi to Samsung Tizen and LG webOS sets. Playback runs through
+**mpv** on Linux or through **VLC/YouTube intents** on an Android phone in
+Termux, which - plugged into HDMI - is the cheapest media box there is. A
+library layer reads your own **M3U playlists and XMLTV guides** (the
+project ships no content) and turns them into a searchable, favouritable,
+resumable catalogue on a phone-friendly web remote.
 
 ```bash
-sudo sh scripts/install.sh     # Debian/Raspberry Pi OS
-python3 -m smarttv --demo      # try it with no TV attached
-python3 -m smarttv --cmd power on
+sh scripts/install_termux.sh   # Android phone
+sudo sh scripts/install.sh     # Debian / Raspberry Pi OS
+python3 -m smarttv --demo      # no hardware at all
 ```

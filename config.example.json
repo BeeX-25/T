@@ -4,8 +4,11 @@
     "port": 8099,
     "auth_token": ""
   },
+  "state_file": "~/.smarttv/state.json",
+
   "tv": {
-    "order": ["cec", "samsung", "webos"],
+    "order": ["cec", "ir", "samsung", "webos"],
+
     "cec": {
       "enabled": true,
       "binary": "cec-client",
@@ -15,6 +18,22 @@
       "source_address": 4,
       "timeout": 12
     },
+
+    "ir": {
+      "enabled": false,
+      "brand": "samsung",
+      "address": null,
+      "repeat": 1,
+      "command": "",
+      "brands": {
+        "my_tv": {
+          "protocol": "nec",
+          "address": 4,
+          "keys": { "power": 8, "volume_up": 2, "volume_down": 3 }
+        }
+      }
+    },
+
     "samsung": {
       "enabled": false,
       "host": "192.168.1.50",
@@ -22,6 +41,7 @@
       "mac": "",
       "token_file": "~/.smarttv/samsung_token.txt"
     },
+
     "webos": {
       "enabled": false,
       "host": "192.168.1.51",
@@ -29,20 +49,60 @@
       "key_file": "~/.smarttv/webos_key.json"
     }
   },
+
   "player": {
     "enabled": true,
-    "binary": "mpv",
-    "ipc_socket": "/tmp/smarttv-mpv.sock",
-    "args": [
-      "--fullscreen",
-      "--force-window=yes",
-      "--ytdl-format=bestvideo[height<=?1080]+bestaudio/best"
+    "backend": "auto",
+    "mpv": {
+      "binary": "mpv",
+      "ipc_socket": "/tmp/smarttv-mpv.sock",
+      "args": [
+        "--fullscreen",
+        "--force-window=yes",
+        "--ytdl-format=bestvideo[height<=?1080]+bestaudio/best"
+      ]
+    },
+    "android": {
+      "app": "vlc",
+      "use_input_keyevents": false
+    }
+  },
+
+  "catalog": {
+    "cache_hours": 6,
+    "cache_dir": "~/.smarttv/cache",
+    "timeout": 20,
+    "sources": [
+      {
+        "name": "قنوات عربية مفتوحة (iptv-org)",
+        "type": "m3u",
+        "kind": "live",
+        "url": "https://iptv-org.github.io/iptv/languages/ara.m3u"
+      },
+      {
+        "name": "دليل البرامج",
+        "type": "xmltv",
+        "url": "https://iptv-org.github.io/epg/guides/ar.xml"
+      },
+      {
+        "name": "أفلامي المحلية",
+        "type": "m3u",
+        "kind": "movies",
+        "path": "~/media/movies.m3u"
+      },
+      {
+        "name": "مسلسلاتي",
+        "type": "m3u",
+        "kind": "series",
+        "path": "~/media/series.m3u"
+      }
     ]
   },
+
   "shortcuts": [
-    { "name": "YouTube", "url": "https://www.youtube.com" },
-    { "name": "أخبار مباشرة", "url": "https://www.youtube.com/watch?v=jNwSNwUxLpU" }
+    { "name": "YouTube", "url": "https://www.youtube.com" }
   ],
+
   "automation": {
     "sleep_timer_minutes": 45,
     "rules": [

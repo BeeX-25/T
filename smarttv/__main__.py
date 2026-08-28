@@ -4,6 +4,7 @@
     python3 -m smarttv --demo                # no TV needed, for development
     python3 -m smarttv --discover            # list TVs on the LAN
     python3 -m smarttv --cmd power on        # one-shot control from a script
+    python3 -m smarttv --cmd search الجزيرة  # search the library
 """
 
 from __future__ import annotations
@@ -54,6 +55,11 @@ COMMANDS = {
     "sleep": lambda api, args: api.dispatch(
         "POST", "/api/sleep", {"minutes": float(args[0])} if args else {}
     ),
+    "search": lambda api, args: api.dispatch(
+        "GET", "/api/catalog", {"q": " ".join(args), "limit": 20}
+    ),
+    "refresh": lambda api, args: api.dispatch("POST", "/api/catalog/refresh", {}),
+    "favorites": lambda api, args: api.dispatch("GET", "/api/favorites", {}),
 }
 
 

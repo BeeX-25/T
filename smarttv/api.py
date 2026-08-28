@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import time
+
 from . import discovery, keys as keymap
 from .automation import Scheduler
 from .backends.base import TVError
-from .media import Player, PlayerError
+from .catalog import Catalog
+from .players import PlayerError, create_player
 from .registry import Registry
+from .store import Store
 
 
 class ApiError(Exception):
@@ -20,7 +24,11 @@ class Api:
         self.config = config
         self.logger = logger or (lambda message: None)
         self.registry = Registry.from_config(config["tv"], demo=demo)
-        self.player = Player(config["player"])
+        self.player = create_player(config["player"])
+        self.store = Store(config.get("state_file", "~/.smarttv/state.json"))
+        self.catalog = Catalog(config.get("catalog", {}), logger=self.logger)
+        self.current = None
+        self._last_resume_write = 0
         self.scheduler = Scheduler(
             actions=self._actions(),
             rules=config["automation"].get("rules", []),
@@ -40,6 +48,13 @@ class Api:
             ("POST", "/api/player"): self.player_control,
             ("POST", "/api/sleep"): self.sleep_timer,
             ("DELETE", "/api/sleep"): self.cancel_sleep_timer,
+            ("GET", "/api/catalog"): self.browse,
+            ("POST", "/api/catalog/refresh"): self.refresh_catalog,
+            ("GET", "/api/series"): self.browse_series,
+            ("GET", "/api/epg"): self.epg,
+            ("GET", "/api/favorites"): self.list_favorites,
+            ("POST", "/api/favorites"): self.toggle_favorite,
+            ("GET", "/api/resume"): self.list_resume,
         }
 
     # -- lifecycle --------------------------------------------------------
@@ -47,6 +62,7 @@ class Api:
         self.scheduler.start()
 
     def shutdown(self):
+        self._save_position(force=True)
         self.scheduler.shutdown()
         try:
             self.player.stop()
@@ -81,6 +97,26 @@ class Api:
             raise ApiError(str(exc), status=400) from exc
 
     # -- handlers ---------------------------------------------------------
+    def _save_position(self, force=False):
+        """Store the playback position, at most once every 30 seconds."""
+        if not self.current:
+            return
+        if not force and time.time() - self._last_resume_write < 30:
+            return
+        try:
+            state = self.player.status()
+        except PlayerError:
+            return
+        if not state.get("running") or not state.get("position"):
+            return
+        self._last_resume_write = time.time()
+        self.store.remember_position(
+            self.current["url"],
+            state.get("position"),
+            state.get("duration"),
+            self.current.get("name"),
+        )
+
     def status(self, payload):
         active = self.registry.active()
         power = None
@@ -90,12 +126,16 @@ class Api:
                 power = self.registry.call("power_status")
             except TVError as exc:
                 power_error = str(exc)
+        player_state = self.player.status()
+        self._save_position()
         return {
             "backend": active.name if active else None,
             "backends": self.registry.info(),
             "power": power,
             "power_error": power_error,
-            "player": self.player.status(),
+            "player": player_state,
+            "now_playing": self.current,
+            "catalog": self.catalog.status(),
             "scheduler": self.scheduler.describe(),
         }
 
@@ -108,7 +148,12 @@ class Api:
             "sleep_timer_minutes": self.config["automation"].get(
                 "sleep_timer_minutes", 45
             ),
-            "player_enabled": self.player.available(),
+            "player": {
+                "name": self.player.name,
+                "available": self.player.available(),
+                "capabilities": sorted(self.player.capabilities()),
+            },
+            "catalog": self.catalog.status(),
         }
 
     def discover(self, payload):
@@ -178,7 +223,75 @@ class Api:
                 self.registry.call("power_on")
             except TVError as exc:
                 self.logger("cast: could not power on the TV: %s" % exc)
-        return self.player.play(url, append=bool(payload.get("append")))
+        self._save_position()
+        start = None
+        if payload.get("resume", True):
+            start = self.store.resume_position(url)
+        item = {
+            "url": url,
+            "name": payload.get("name") or url,
+            "kind": payload.get("kind", "live"),
+            "logo": payload.get("logo", ""),
+            "group": payload.get("group", ""),
+        }
+        result = self.player.play(url, append=bool(payload.get("append")), start=start)
+        self.current = item
+        self.store.add_history(item)
+        if start:
+            result["resumed_at"] = start
+        return result
+
+    # -- library ----------------------------------------------------------
+    def browse(self, payload):
+        kind = payload.get("kind") or None
+        found = self.catalog.search(
+            query=payload.get("q", ""),
+            kind=kind,
+            group=payload.get("group") or None,
+            limit=payload.get("limit", 60),
+            offset=payload.get("offset", 0),
+        )
+        favorites = {item["url"] for item in self.store.favorites()}
+        for item in found["items"]:
+            item["favorite"] = item.get("url") in favorites
+        found["groups"] = self.catalog.groups(kind)
+        found["status"] = self.catalog.status()
+        return found
+
+    def browse_series(self, payload):
+        return self.catalog.series(
+            query=payload.get("q", ""),
+            limit=payload.get("limit", 60),
+            offset=payload.get("offset", 0),
+        )
+
+    def refresh_catalog(self, payload):
+        return self.catalog.refresh(force=True)
+
+    def epg(self, payload):
+        channel = payload.get("channel")
+        if not channel:
+            raise ApiError("channel is required")
+        return {
+            "channel": channel,
+            "programmes": self.catalog.now_and_next(
+                channel, count=int(payload.get("count", 3))
+            ),
+        }
+
+    def list_favorites(self, payload):
+        return {"items": self.store.favorites()}
+
+    def toggle_favorite(self, payload):
+        if not payload.get("url"):
+            raise ApiError("url is required")
+        return self.store.toggle_favorite(payload)
+
+    def list_resume(self, payload):
+        return {
+            "items": self.store.resume_list(int(payload.get("limit", 20))),
+            "history": self.store.history(int(payload.get("limit", 20))),
+        }
 
     def player_control(self, payload):
         action = str(payload.get("action", "toggle")).lower()
@@ -189,7 +302,10 @@ class Api:
         if action == "resume":
             return self.player.pause(False)
         if action == "stop":
-            return self.player.stop()
+            self._save_position(force=True)
+            result = self.player.stop()
+            self.current = None
+            return result
         if action == "seek":
             return self.player.seek(payload.get("value", 30))
         if action == "volume":

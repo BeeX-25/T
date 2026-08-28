@@ -22,7 +22,7 @@ DEFAULTS = {
     "tv": {
         # Backends are tried in this order; the first available one that
         # supports the requested command wins.
-        "order": ["cec", "samsung", "webos"],
+        "order": ["cec", "ir", "samsung", "webos"],
         "cec": {
             "enabled": True,
             "binary": "cec-client",
@@ -32,6 +32,17 @@ DEFAULTS = {
             "tv_address": 0,
             "source_address": 4,
             "timeout": 12,
+        },
+        "ir": {
+            # For a phone with an IR blaster: no cable, no adapter, nothing
+            # plugged into the TV.  brand is one of samsung, lg, sony,
+            # philips, generic_nec, or your own entry under "brands".
+            "enabled": False,
+            "brand": "samsung",
+            "address": None,
+            "repeat": 1,
+            "command": "",
+            "brands": {},
         },
         "samsung": {
             "enabled": False,
@@ -50,13 +61,33 @@ DEFAULTS = {
     },
     "player": {
         "enabled": True,
-        "binary": "mpv",
-        "ipc_socket": "/tmp/smarttv-mpv.sock",
-        "args": [
-            "--fullscreen",
-            "--force-window=yes",
-            "--ytdl-format=bestvideo[height<=?1080]+bestaudio/best",
-        ],
+        # auto picks android on a phone and mpv everywhere else.
+        "backend": "auto",
+        "mpv": {
+            "binary": "mpv",
+            "ipc_socket": "/tmp/smarttv-mpv.sock",
+            "args": [
+                "--fullscreen",
+                "--force-window=yes",
+                "--ytdl-format=bestvideo[height<=?1080]+bestaudio/best",
+            ],
+        },
+        "android": {
+            "app": "vlc",
+            "use_input_keyevents": False,
+        },
+    },
+    # Favourites, resume points and history live here.
+    "state_file": "~/.smarttv/state.json",
+    "catalog": {
+        # Playlists and guides you point the library at.  Nothing is
+        # bundled: add free-to-air playlists, a subscription you pay for,
+        # or your own media server's M3U export.
+        # {"name": .., "type": "m3u"|"xmltv", "url"|"path": .., "kind": "live"|"movies"|"series"}
+        "sources": [],
+        "cache_hours": 6,
+        "cache_dir": "~/.smarttv/cache",
+        "timeout": 20,
     },
     "shortcuts": [
         {"name": "YouTube", "url": "https://www.youtube.com"},
@@ -69,7 +100,7 @@ DEFAULTS = {
 }
 
 # Values that are file-system paths and should get ~ expanded.
-_PATH_KEYS = {"token_file", "key_file", "ipc_socket"}
+_PATH_KEYS = {"token_file", "key_file", "ipc_socket", "state_file", "cache_dir"}
 
 
 def deep_merge(base, override):

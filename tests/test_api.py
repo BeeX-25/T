@@ -1,20 +1,20 @@
+import tempfile
 import unittest
 
 from smarttv.api import Api, ApiError
-from smarttv.config import load
 
-
-def demo_api():
-    return Api(load(), demo=True)
+from tests.support import isolated_settings
 
 
 class DispatchTests(unittest.TestCase):
     def setUp(self):
-        self.api = demo_api()
+        self.folder = tempfile.TemporaryDirectory()
+        self.api = Api(isolated_settings(self.folder.name), demo=True)
         self.tv = self.api.registry.get("dummy")
 
     def tearDown(self):
         self.api.shutdown()
+        self.folder.cleanup()
 
     def test_unknown_endpoint(self):
         with self.assertRaises(ApiError) as caught:
@@ -90,9 +90,91 @@ class DispatchTests(unittest.TestCase):
         self.assertGreater(remaining, 45 * 60 - 10)
 
 
+class LibraryTests(unittest.TestCase):
+    PLAYLIST = (
+        "#EXTM3U\n"
+        '#EXTINF:-1 tvg-id="mbc1" group-title="عام",MBC 1\n'
+        "http://stream/1\n"
+        '#EXTINF:-1 group-title="أخبار",Al Jazeera\n'
+        "http://stream/2\n"
+    )
+
+    def setUp(self):
+        import os
+
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        playlist = os.path.join(self.folder.name, "list.m3u")
+        with open(playlist, "w", encoding="utf-8") as handle:
+            handle.write(self.PLAYLIST)
+        settings = isolated_settings(self.folder.name)
+        settings["catalog"]["sources"] = [
+            {"name": "local", "path": playlist, "kind": "live"}
+        ]
+        self.api = Api(settings, demo=True)
+        self.addCleanup(self.api.shutdown)
+
+    def test_browse_returns_items_and_groups(self):
+        data = self.api.dispatch("GET", "/api/catalog", {"kind": "live"})
+        self.assertEqual(data["total"], 2)
+        self.assertEqual({g["name"] for g in data["groups"]}, {"عام", "أخبار"})
+
+    def test_browse_filters_by_query_and_group(self):
+        self.assertEqual(self.api.dispatch("GET", "/api/catalog", {"q": "jazeera"})["total"], 1)
+        self.assertEqual(self.api.dispatch("GET", "/api/catalog", {"group": "عام"})["total"], 1)
+
+    def test_browse_marks_favorites(self):
+        self.api.dispatch("POST", "/api/favorites", {"url": "http://stream/1", "name": "MBC 1"})
+        items = self.api.dispatch("GET", "/api/catalog", {})["items"]
+        flags = {item["url"]: item["favorite"] for item in items}
+        self.assertTrue(flags["http://stream/1"])
+        self.assertFalse(flags["http://stream/2"])
+
+    def test_favorites_toggle_round_trip(self):
+        self.api.dispatch("POST", "/api/favorites", {"url": "http://stream/2", "name": "AJ"})
+        self.assertEqual(len(self.api.dispatch("GET", "/api/favorites", {})["items"]), 1)
+        self.api.dispatch("POST", "/api/favorites", {"url": "http://stream/2"})
+        self.assertEqual(self.api.dispatch("GET", "/api/favorites", {})["items"], [])
+
+    def test_favorites_need_a_url(self):
+        with self.assertRaises(ApiError):
+            self.api.dispatch("POST", "/api/favorites", {"name": "بلا رابط"})
+
+    def test_refresh_reports_what_it_loaded(self):
+        self.assertEqual(self.api.dispatch("POST", "/api/catalog/refresh", {})["items"], 2)
+
+    def test_epg_requires_a_channel(self):
+        with self.assertRaises(ApiError):
+            self.api.dispatch("GET", "/api/epg", {})
+        self.assertEqual(
+            self.api.dispatch("GET", "/api/epg", {"channel": "mbc1"})["programmes"], []
+        )
+
+    def test_cast_records_history_even_without_a_player(self):
+        with self.assertRaises(ApiError):
+            self.api.dispatch(
+                "POST", "/api/cast", {"url": "http://stream/1", "name": "MBC 1"}
+            )
+        # The player is missing in the test environment, so nothing is
+        # remembered: history is only written once playback really starts.
+        self.assertEqual(self.api.store.history(), [])
+
+    def test_resume_endpoint_reports_stored_positions(self):
+        self.api.store.remember_position("http://stream/1", 90, 3600, "MBC 1")
+        data = self.api.dispatch("GET", "/api/resume", {})
+        self.assertEqual(data["items"][0]["url"], "http://stream/1")
+
+    def test_status_includes_the_catalog(self):
+        status = self.api.dispatch("GET", "/api/status", {})
+        self.assertEqual(status["catalog"]["sources"], 1)
+        self.assertIsNone(status["now_playing"])
+
+
 class AutomationActionTests(unittest.TestCase):
     def test_rules_drive_the_registry(self):
-        settings = load()
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        settings = isolated_settings(folder.name)
         settings["automation"]["rules"] = [
             {"name": "night", "cron": "0 2 * * *", "action": "power_off"}
         ]

@@ -67,6 +67,25 @@
   </section>
 
   <section class="card">
+    <h2>المكتبة</h2>
+    <div class="tabs" id="tabs">
+      <button class="tab is-active" data-kind="live">قنوات مباشرة</button>
+      <button class="tab" data-kind="movies">أفلام</button>
+      <button class="tab" data-kind="series">مسلسلات</button>
+      <button class="tab" data-kind="favorites">المفضلة</button>
+      <button class="tab" data-kind="resume">أكمل المشاهدة</button>
+    </div>
+    <form id="searchForm" class="cast">
+      <input id="searchInput" type="search" placeholder="ابحث عن قناة أو فيلم أو مسلسل…">
+      <button class="btn" id="refreshBtn" type="button" title="تحديث القوائم">⟳<span>تحديث</span></button>
+    </form>
+    <div class="chips" id="groups"></div>
+    <div class="grid" id="results"></div>
+    <div class="more"><button class="chip" id="moreBtn" hidden>عرض المزيد</button></div>
+    <p id="libraryInfo" class="muted"></p>
+  </section>
+
+  <section class="card">
     <h2>المدخل ومؤقت النوم</h2>
     <div class="chips" id="sources"></div>
     <div class="chips">
@@ -78,6 +97,12 @@
     <p id="sleepInfo" class="muted"></p>
   </section>
 </main>
+
+<dialog id="episodes">
+  <h2 id="episodesTitle">الحلقات</h2>
+  <div id="episodesList" class="episodes"></div>
+  <menu><button class="btn" id="episodesClose" type="button">إغلاق</button></menu>
+</dialog>
 
 <dialog id="settings">
   <form method="dialog">

@@ -15,14 +15,15 @@ import socket
 import subprocess
 import threading
 
-
-class PlayerError(Exception):
-    pass
+from .base import Player, PlayerError
 
 
-class Player:
+class MpvPlayer(Player):
+    name = "mpv"
+
     def __init__(self, settings=None):
         settings = settings or {}
+        super().__init__(settings)
         self.enabled = bool(settings.get("enabled", True))
         self.binary = settings.get("binary", "mpv")
         self.socket_path = settings.get("ipc_socket", "/tmp/smarttv-mpv.sock")
@@ -34,6 +35,9 @@ class Player:
     # -- process ----------------------------------------------------------
     def available(self):
         return self.enabled and shutil.which(self.binary) is not None
+
+    def capabilities(self):
+        return {"play", "pause", "seek", "volume", "stop", "position"}
 
     def running(self):
         return self._process is not None and self._process.poll() is None
@@ -128,10 +132,25 @@ class Player:
             return default
 
     # -- playback ---------------------------------------------------------
-    def play(self, url, append=False):
+    def play(self, url, append=False, start=None):
         if not url:
             raise PlayerError("no url given")
-        self.command("loadfile", url, "append-play" if append else "replace")
+        flag = "append-play" if append else "replace"
+        if start:
+            # The 4-argument loadfile takes per-file options, which is the
+            # only way to resume before the first frame is decoded.  Older
+            # mpv builds reject it, so fall back to a seek after loading.
+            try:
+                self.command("loadfile", url, flag, -1, {"start": str(int(start))})
+                return {"playing": True, "url": url, "start": int(start)}
+            except PlayerError:
+                self.command("loadfile", url, flag)
+                try:
+                    self.command("seek", float(start), "absolute")
+                except PlayerError:
+                    pass
+                return {"playing": True, "url": url, "start": int(start)}
+        self.command("loadfile", url, flag)
         return {"playing": True, "url": url}
 
     def pause(self, state=True):
@@ -153,10 +172,11 @@ class Player:
 
     def status(self):
         if not self.running():
-            return {"available": self.available(), "running": False}
+            return {"available": self.available(), "running": False, "player": self.name}
         return {
             "available": True,
             "running": True,
+            "player": self.name,
             "paused": bool(self._get("pause", False)),
             "position": self._get("time-pos"),
             "duration": self._get("duration"),

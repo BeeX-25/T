@@ -1,19 +1,22 @@
 import json
+import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
 
 from smarttv.api import Api
-from smarttv.config import load
 from smarttv.server import RemoteServer
+
+from tests.support import isolated_settings
 
 
 class ServerTestCase(unittest.TestCase):
     auth_token = ""
 
     def setUp(self):
-        settings = load()
+        self.folder = tempfile.TemporaryDirectory()
+        settings = isolated_settings(self.folder.name)
         settings["server"]["auth_token"] = self.auth_token
         self.api = Api(settings, demo=True)
         self.server = RemoteServer(("127.0.0.1", 0), self.api, auth_token=self.auth_token)
@@ -29,6 +32,7 @@ class ServerTestCase(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=3)
         self.api.shutdown()
+        self.folder.cleanup()
 
     def request(self, method, path, body=None, headers=None):
         data = json.dumps(body).encode("utf-8") if body is not None else None

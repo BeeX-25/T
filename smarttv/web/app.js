@@ -70,7 +70,7 @@
     var player = data.player || {};
     var now = el("nowPlaying");
     if (player.running) {
-      var label = player.title || "قيد التشغيل";
+      var label = (data.now_playing && data.now_playing.name) || player.title || "قيد التشغيل";
       var clock = player.position != null && player.duration
         ? " (" + formatClock(player.position) + " / " + formatClock(player.duration) + ")"
         : "";
@@ -206,6 +206,229 @@
     }
   });
 
+
+  /* --- library ------------------------------------------------------- */
+
+  var library = { kind: "live", query: "", group: "", offset: 0, limit: 60, busy: false };
+
+  function play(item) {
+    send("POST", "/api/cast", {
+      url: item.url, name: item.name, kind: item.kind || library.kind,
+      logo: item.logo || "", group: item.group || ""
+    }, "جارٍ التشغيل: " + (item.name || ""));
+  }
+
+  function initials(name) {
+    // "الجزيرة" starts with the article, so two raw letters say nothing;
+    // drop it before taking the badge letters.
+    var text = (name || "?").trim();
+    if (text.length > 3 && text.slice(0, 2) === "ال") text = text.slice(2);
+    return text.slice(0, 2);
+  }
+
+  function itemCard(item, extra, onClick) {
+    var card = document.createElement("button");
+    card.className = "item";
+    card.type = "button";
+
+    var thumb = document.createElement("div");
+    thumb.className = "thumb";
+    if (item.logo) {
+      var image = document.createElement("img");
+      image.loading = "lazy";
+      image.alt = "";
+      image.src = item.logo;
+      // A dead logo URL must not leave an empty hole in the grid.
+      image.addEventListener("error", function () {
+        thumb.textContent = initials(item.name);
+      });
+      thumb.appendChild(image);
+    } else {
+      thumb.textContent = initials(item.name);
+    }
+    card.appendChild(thumb);
+
+    var title = document.createElement("div");
+    title.className = "title";
+    title.textContent = item.name || item.url;
+    card.appendChild(title);
+
+    if (extra) {
+      var sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent = extra;
+      card.appendChild(sub);
+    }
+
+    if (item.duration && item.position) {
+      var bar = document.createElement("div");
+      bar.className = "bar";
+      var fill = document.createElement("i");
+      fill.style.width = Math.min(100, (item.position / item.duration) * 100) + "%";
+      bar.appendChild(fill);
+      card.appendChild(bar);
+    }
+
+    if (item.url && library.kind !== "series") {
+      var star = document.createElement("button");
+      star.className = "star";
+      star.type = "button";
+      star.textContent = item.favorite ? "★" : "☆";
+      star.addEventListener("click", function (event) {
+        event.stopPropagation();
+        api("POST", "/api/favorites", item).then(function (data) {
+          star.textContent = data.favorite ? "★" : "☆";
+          item.favorite = data.favorite;
+        }).catch(function (error) { toast(error.message, true); });
+      });
+      card.appendChild(star);
+    }
+
+    card.addEventListener("click", onClick || function () { play(item); });
+    return card;
+  }
+
+  function showEpisodes(show) {
+    el("episodesTitle").textContent = show.name;
+    var list = el("episodesList");
+    list.innerHTML = "";
+    show.episodes.forEach(function (episode) {
+      var button = document.createElement("button");
+      button.type = "button";
+      var label = episode.season && episode.episode
+        ? "الموسم " + episode.season + " · الحلقة " + episode.episode
+        : episode.name;
+      button.textContent = label;
+      button.addEventListener("click", function () {
+        el("episodes").close();
+        play({ url: episode.url, name: show.name + " - " + label, kind: "series" });
+      });
+      list.appendChild(button);
+    });
+    el("episodes").showModal();
+  }
+
+  function renderGroups(groups) {
+    var box = el("groups");
+    box.innerHTML = "";
+    if (!groups || !groups.length) return;
+    groups.slice(0, 14).forEach(function (group) {
+      var chip = document.createElement("button");
+      chip.className = "chip" + (library.group === group.name ? " is-on" : "");
+      chip.type = "button";
+      chip.textContent = group.name + " (" + group.count + ")";
+      chip.addEventListener("click", function () {
+        library.group = library.group === group.name ? "" : group.name;
+        loadLibrary(true);
+      });
+      box.appendChild(chip);
+    });
+  }
+
+  function query(params) {
+    return Object.keys(params)
+      .filter(function (key) { return params[key] !== "" && params[key] != null; })
+      .map(function (key) { return key + "=" + encodeURIComponent(params[key]); })
+      .join("&");
+  }
+
+  function loadLibrary(reset) {
+    if (library.busy) return;
+    if (reset) { library.offset = 0; el("results").innerHTML = ""; }
+    library.busy = true;
+    var info = el("libraryInfo");
+    info.textContent = "جارٍ التحميل…";
+
+    var request;
+    if (library.kind === "favorites") {
+      request = api("GET", "/api/favorites").then(function (data) {
+        return { items: data.items, total: data.items.length };
+      });
+    } else if (library.kind === "resume") {
+      request = api("GET", "/api/resume").then(function (data) {
+        var seen = {};
+        var items = data.items.concat(data.history).filter(function (entry) {
+          if (!entry.url || seen[entry.url]) return false;
+          seen[entry.url] = true;
+          return true;
+        });
+        return { items: items, total: items.length };
+      });
+    } else if (library.kind === "series") {
+      request = api("GET", "/api/series?" + query({
+        q: library.query, limit: library.limit, offset: library.offset
+      }));
+    } else {
+      request = api("GET", "/api/catalog?" + query({
+        kind: library.kind, q: library.query, group: library.group,
+        limit: library.limit, offset: library.offset
+      }));
+    }
+
+    request.then(function (data) {
+      renderGroups(data.groups);
+      var results = el("results");
+      (data.items || []).forEach(function (item) {
+        var extra = "";
+        if (library.kind === "series") extra = (item.episode_count || 0) + " حلقة";
+        else if (item.group) extra = item.group;
+        // A show has no stream of its own - it opens its episode list.
+        var card = library.kind === "series"
+          ? itemCard(item, extra, function () { showEpisodes(item); })
+          : itemCard(item, extra);
+        results.appendChild(card);
+      });
+      library.offset += (data.items || []).length;
+      var more = el("moreBtn");
+      more.hidden = !(data.total && library.offset < data.total);
+      if (!results.children.length) {
+        info.textContent = (data.status && data.status.sources === 0)
+          ? "لا توجد مصادر بعد — أضف قوائم M3U في ملف الإعدادات (catalog.sources)"
+          : "لا نتائج";
+      } else {
+        info.textContent = "عرض " + library.offset + " من " + (data.total || library.offset);
+      }
+      if (data.status && data.status.errors && data.status.errors.length) {
+        info.textContent += " · تعذّر تحميل " + data.status.errors.length + " مصدر";
+      }
+    }).catch(function (error) {
+      info.textContent = error.message;
+    }).then(function () { library.busy = false; });
+  }
+
+  el("tabs").addEventListener("click", function (event) {
+    var tab = event.target.closest(".tab");
+    if (!tab) return;
+    Array.prototype.forEach.call(el("tabs").children, function (node) {
+      node.classList.toggle("is-active", node === tab);
+    });
+    library.kind = tab.dataset.kind;
+    library.group = "";
+    el("groups").innerHTML = "";
+    loadLibrary(true);
+  });
+
+  var searchTimer = null;
+  el("searchInput").addEventListener("input", function (event) {
+    clearTimeout(searchTimer);
+    var value = event.target.value;
+    searchTimer = setTimeout(function () {
+      library.query = value;
+      loadLibrary(true);
+    }, 350);
+  });
+
+  el("searchForm").addEventListener("submit", function (event) { event.preventDefault(); });
+  el("moreBtn").addEventListener("click", function () { loadLibrary(false); });
+  el("episodesClose").addEventListener("click", function () { el("episodes").close(); });
+  el("refreshBtn").addEventListener("click", function () {
+    toast("جارٍ تحديث القوائم…");
+    api("POST", "/api/catalog/refresh").then(function (data) {
+      toast("تم تحميل " + data.items + " عنصراً");
+      loadLibrary(true);
+    }).catch(function (error) { toast(error.message, true); });
+  });
+
   /* --- polling ------------------------------------------------------- */
 
   var refreshing = false;
@@ -226,6 +449,7 @@
       toast(error.message, true);
     });
     refresh();
+    loadLibrary(true);
   }
 
   boot();
