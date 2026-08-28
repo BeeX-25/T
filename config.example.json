@@ -1,0 +1,52 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8099,
+    "auth_token": ""
+  },
+  "tv": {
+    "order": ["cec", "samsung", "webos"],
+    "cec": {
+      "enabled": true,
+      "binary": "cec-client",
+      "adapter": "",
+      "osd_name": "SmartBridge",
+      "tv_address": 0,
+      "source_address": 4,
+      "timeout": 12
+    },
+    "samsung": {
+      "enabled": false,
+      "host": "192.168.1.50",
+      "port": 8002,
+      "mac": "",
+      "token_file": "~/.smarttv/samsung_token.txt"
+    },
+    "webos": {
+      "enabled": false,
+      "host": "192.168.1.51",
+      "mac": "",
+      "key_file": "~/.smarttv/webos_key.json"
+    }
+  },
+  "player": {
+    "enabled": true,
+    "binary": "mpv",
+    "ipc_socket": "/tmp/smarttv-mpv.sock",
+    "args": [
+      "--fullscreen",
+      "--force-window=yes",
+      "--ytdl-format=bestvideo[height<=?1080]+bestaudio/best"
+    ]
+  },
+  "shortcuts": [
+    { "name": "YouTube", "url": "https://www.youtube.com" },
+    { "name": "أخبار مباشرة", "url": "https://www.youtube.com/watch?v=jNwSNwUxLpU" }
+  ],
+  "automation": {
+    "sleep_timer_minutes": 45,
+    "rules": [
+      { "name": "إطفاء تلقائي بعد منتصف الليل", "cron": "0 2 * * *", "action": "power_off" }
+    ]
+  }
+}

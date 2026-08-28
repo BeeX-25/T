@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>ريموت التلفاز</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <span class="dot" id="dot"></span>
+    <div>
+      <strong>ريموت التلفاز</strong>
+      <small id="statusText">جارٍ الاتصال…</small>
+    </div>
+  </div>
+  <button class="icon" id="settingsBtn" title="الإعدادات" aria-label="الإعدادات">⚙</button>
+</header>
+
+<main>
+  <section class="card row-3">
+    <button class="btn danger" data-action="power" data-state="toggle">⏻<span>الطاقة</span></button>
+    <button class="btn" data-action="key" data-key="home">🏠<span>الرئيسية</span></button>
+    <button class="btn" data-action="key" data-key="back">↩<span>رجوع</span></button>
+  </section>
+
+  <section class="card pad-wrap">
+    <div class="dpad">
+      <button class="pad up" data-action="key" data-key="up">▲</button>
+      <button class="pad left" data-action="key" data-key="left">◀</button>
+      <button class="pad ok" data-action="key" data-key="select">OK</button>
+      <button class="pad right" data-action="key" data-key="right">▶</button>
+      <button class="pad down" data-action="key" data-key="down">▼</button>
+    </div>
+    <div class="rockers">
+      <div class="rocker">
+        <button data-action="volume" data-value="up">+</button>
+        <span>الصوت</span>
+        <button data-action="volume" data-value="down">−</button>
+      </div>
+      <button class="btn wide" data-action="volume" data-value="mute">🔇<span>كتم</span></button>
+      <div class="rocker">
+        <button data-action="key" data-key="channel_up">+</button>
+        <span>القناة</span>
+        <button data-action="key" data-key="channel_down">−</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>البث والتشغيل</h2>
+    <form id="castForm" class="cast">
+      <input id="castUrl" type="url" inputmode="url" placeholder="ألصق رابط يوتيوب أو رابط فيديو…" required>
+      <button class="btn primary" type="submit">▶<span>شغّل</span></button>
+    </form>
+    <div id="shortcuts" class="chips"></div>
+    <div class="row-4 media">
+      <button class="btn" data-action="player" data-value="toggle">⏯<span>إيقاف مؤقت</span></button>
+      <button class="btn" data-action="player" data-value="seek" data-amount="-30">⏪<span>٣٠ ث</span></button>
+      <button class="btn" data-action="player" data-value="seek" data-amount="30">⏩<span>٣٠ ث</span></button>
+      <button class="btn" data-action="player" data-value="stop">⏹<span>إيقاف</span></button>
+    </div>
+    <p id="nowPlaying" class="muted"></p>
+  </section>
+
+  <section class="card">
+    <h2>المدخل ومؤقت النوم</h2>
+    <div class="chips" id="sources"></div>
+    <div class="chips">
+      <button class="chip" data-action="sleep" data-minutes="30">٣٠ دقيقة</button>
+      <button class="chip" data-action="sleep" data-minutes="45">٤٥ دقيقة</button>
+      <button class="chip" data-action="sleep" data-minutes="90">٩٠ دقيقة</button>
+      <button class="chip ghost" data-action="sleep-cancel">إلغاء</button>
+    </div>
+    <p id="sleepInfo" class="muted"></p>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>الإعدادات</h2>
+    <label>رمز الدخول (إن وُجد)
+      <input id="tokenInput" type="password" autocomplete="off" placeholder="auth_token">
+    </label>
+    <div id="backendInfo" class="muted"></div>
+    <menu>
+      <button class="btn" id="discoverBtn" type="button">ابحث عن أجهزة</button>
+      <button class="btn primary" value="save">حفظ</button>
+    </menu>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body>
+</html>

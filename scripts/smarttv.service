@@ -1,0 +1,20 @@
+[Unit]
+Description=SmartTV Bridge (HDMI-CEC remote and caster)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/smarttv
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m smarttv --config /etc/smarttv/config.json
+Restart=on-failure
+RestartSec=5
+# The CEC adapter and the display are the only hardware this needs.
+SupplementaryGroups=video render
+NoNewPrivileges=yes
+PrivateTmp=no
+
+[Install]
+WantedBy=multi-user.target
