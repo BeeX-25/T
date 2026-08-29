@@ -180,6 +180,92 @@ class LibraryTests(unittest.TestCase):
         self.assertIsNone(status["now_playing"])
 
 
+class InfraredWizardTests(unittest.TestCase):
+    LIRC = (
+        "begin remote\n  name MAGIC555\n  bits 16\n  flags SPACE_ENC\n"
+        "  header 9024 4468\n  one 573 1668\n  zero 573 551\n  ptrail 574\n"
+        "  pre_data_bits 16\n  pre_data 0x807F\n"
+        "  begin codes\n    KEY_POWER 0x12ED\n    KEY_UP 0x22DD\n  end codes\n"
+        "end remote\n"
+    )
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.settings = isolated_settings(self.folder.name)
+        # "echo" stands in for the phone's IR blaster.
+        self.settings["tv"]["ir"].update(
+            {"enabled": True, "brand": "generic_nec", "command": "echo {frequency} {key}"}
+        )
+        self.api = Api(self.settings)
+        self.addCleanup(self.api.shutdown)
+
+    def test_candidates_include_brands_and_an_address_sweep(self):
+        data = self.api.dispatch("GET", "/api/ir/candidates", {})
+        ids = {entry["id"] for entry in data["candidates"]}
+        self.assertIn("lg", ids)
+        self.assertIn("generic_nec@3", ids)
+        self.assertTrue(data["available"])
+
+    def test_testing_a_candidate_does_not_adopt_it(self):
+        self.api.dispatch("POST", "/api/ir/test", {"brand": "sony", "key": "power"})
+        self.assertEqual(
+            self.api.dispatch("GET", "/api/ir/candidates", {})["profile"]["brand"],
+            "generic_nec",
+        )
+
+    def test_saving_a_candidate_switches_the_remote(self):
+        self.api.dispatch("POST", "/api/ir/save", {"brand": "lg", "address": 4})
+        profile = self.api.dispatch("GET", "/api/ir/candidates", {})["profile"]
+        self.assertEqual(profile, {"brand": "lg", "address": 4})
+
+    def test_a_saved_remote_survives_a_restart(self):
+        self.api.dispatch("POST", "/api/ir/save", {"brand": "sony"})
+        restarted = Api(self.settings)
+        self.addCleanup(restarted.shutdown)
+        self.assertEqual(restarted.registry.get("ir").profile()["brand"], "sony")
+
+    def test_importing_a_lirc_file_registers_and_adopts_it(self):
+        data = self.api.dispatch("POST", "/api/ir/import", {"text": self.LIRC})
+        self.assertEqual(data["brand"], "magic555")
+        self.assertEqual(sorted(data["keys"]), ["power", "up"])
+        self.assertEqual(
+            self.api.dispatch("GET", "/api/ir/candidates", {})["profile"]["brand"],
+            "magic555",
+        )
+
+    def test_an_imported_remote_survives_a_restart(self):
+        self.api.dispatch("POST", "/api/ir/import", {"text": self.LIRC})
+        restarted = Api(self.settings)
+        self.addCleanup(restarted.shutdown)
+        backend = restarted.registry.get("ir")
+        self.assertEqual(backend.profile()["brand"], "magic555")
+        self.assertIn("power", backend.known_keys())
+
+    def test_an_imported_remote_actually_sends_its_own_pattern(self):
+        self.api.dispatch("POST", "/api/ir/import", {"text": self.LIRC})
+        result = self.api.dispatch("POST", "/api/key", {"key": "up"})
+        self.assertEqual(result["brand"], "magic555")
+
+    def test_a_bad_import_is_a_client_error(self):
+        with self.assertRaises(ApiError) as caught:
+            self.api.dispatch("POST", "/api/ir/import", {"text": "nonsense"})
+        self.assertEqual(caught.exception.status, 400)
+
+    def test_import_needs_something_to_read(self):
+        with self.assertRaises(ApiError):
+            self.api.dispatch("POST", "/api/ir/import", {})
+
+    def test_the_wizard_is_404_when_infrared_is_off(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        api = Api(isolated_settings(folder.name), demo=True)
+        self.addCleanup(api.shutdown)
+        with self.assertRaises(ApiError) as caught:
+            api.dispatch("GET", "/api/ir/candidates", {})
+        self.assertEqual(caught.exception.status, 404)
+
+
 class AutomationActionTests(unittest.TestCase):
     def test_rules_drive_the_registry(self):
         folder = tempfile.TemporaryDirectory()

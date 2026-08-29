@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import time
 
-from . import discovery, keys as keymap
+from . import discovery, irimport, keys as keymap
 from .automation import Scheduler
 from .backends.base import TVError
 from .catalog import Catalog
@@ -29,6 +30,7 @@ class Api:
         self.catalog = Catalog(config.get("catalog", {}), logger=self.logger)
         self.current = None
         self._last_resume_write = 0
+        self._restore_ir_profile()
         self.scheduler = Scheduler(
             actions=self._actions(),
             rules=config["automation"].get("rules", []),
@@ -56,6 +58,10 @@ class Api:
             ("POST", "/api/favorites"): self.toggle_favorite,
             ("GET", "/api/resume"): self.list_resume,
             ("GET", "/api/episodes"): self.list_episodes,
+            ("GET", "/api/ir/candidates"): self.ir_candidates,
+            ("POST", "/api/ir/test"): self.ir_test,
+            ("POST", "/api/ir/save"): self.ir_save,
+            ("POST", "/api/ir/import"): self.ir_import,
         }
 
     @staticmethod
@@ -74,6 +80,25 @@ class Api:
                     settings[key] = receiver[key]
         player["enigma2"] = settings
         return player
+
+    def _restore_ir_profile(self):
+        """Re-apply a remote found by the setup wizard on an earlier run."""
+        backend = self.registry.get("ir")
+        profile = self.store.ir_profile()
+        if backend is None or not profile:
+            return
+        try:
+            backend.apply_profile(profile)
+        except TVError as exc:
+            self.logger("ir: stored profile ignored: %s" % exc)
+
+    def _ir_backend(self):
+        backend = self.registry.get("ir")
+        if backend is None:
+            raise ApiError(
+                "the infrared backend is not enabled (set tv.ir.enabled)", status=404
+            )
+        return backend
 
     # -- lifecycle --------------------------------------------------------
     def start(self):
@@ -258,6 +283,64 @@ class Api:
         if start:
             result["resumed_at"] = start
         return result
+
+    # -- infrared setup wizard --------------------------------------------
+    def ir_candidates(self, payload):
+        """Code sets to try, for a remote nobody has a table for."""
+        backend = self._ir_backend()
+        return {
+            "available": backend.available(),
+            "profile": backend.profile(),
+            "keys": backend.known_keys(),
+            "candidates": backend.candidates(),
+        }
+
+    def ir_test(self, payload):
+        """Fire one button from a candidate, so the user can watch the box."""
+        backend = self._ir_backend()
+        return backend.test(payload, payload.get("key", "power"))
+
+    def ir_save(self, payload):
+        """Adopt the candidate that worked, and remember it."""
+        backend = self._ir_backend()
+        profile = backend.apply_profile(payload)
+        if payload.get("keys"):
+            # An imported table has to be stored whole, or it is gone on
+            # the next restart.
+            stored = dict(payload)
+            stored.setdefault("brand", profile["brand"])
+            self.store.save_ir_profile(stored)
+        else:
+            self.store.save_ir_profile(profile)
+        return profile
+
+    def ir_import(self, payload):
+        """Load a lircd.conf or irdb CSV for the exact remote in hand."""
+        backend = self._ir_backend()
+        text = payload.get("text")
+        if not text and payload.get("path"):
+            try:
+                with open(
+                    os.path.expanduser(payload["path"]), "r", encoding="utf-8", errors="replace"
+                ) as handle:
+                    text = handle.read()
+            except OSError as exc:
+                raise ApiError("cannot read that file: %s" % exc) from exc
+        if not text:
+            raise ApiError("send the file contents as text, or a path")
+        try:
+            table = irimport.load(text, payload.get("name"))
+        except ValueError as exc:
+            raise ApiError(str(exc)) from exc
+        brand = backend.register(table, payload.get("name") or table.get("name"))
+        if payload.get("save", True):
+            self.ir_save(dict(table, brand=brand))
+        return {
+            "brand": brand,
+            "protocol": table.get("protocol"),
+            "keys": sorted(table.get("keys", {})),
+            "skipped": table.get("skipped", []),
+        }
 
     # -- library ----------------------------------------------------------
     def browse(self, payload):

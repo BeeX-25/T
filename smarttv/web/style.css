@@ -136,3 +136,16 @@ dialog .btn { min-height: 44px; font-size: 14px; padding: 0 16px; }
 .episodes { display: grid; gap: 6px; max-height: 60vh; overflow: auto; }
 .episodes button { background: var(--card-2); border: 1px solid var(--line); color: var(--text);
   border-radius: 10px; padding: 10px; font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
+
+/* --- infrared wizard ------------------------------------------------ */
+.hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.ir-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.ir-row span { font-size: 13px; }
+.ir-row button { border: 0; border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px;
+  background: var(--key-bg); color: var(--text); cursor: pointer; }
+.ir-row button.save { background: var(--accent); color: #fff; }
+.ir-row.is-current { outline: 2px solid var(--accent); }
+.ir-import { margin-top: 12px; font-size: 13px; color: var(--muted); }
+.ir-import textarea { width: 100%; margin: 8px 0; background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px; font: inherit; font-size: 12px; }

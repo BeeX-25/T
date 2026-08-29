@@ -104,6 +104,19 @@
   <menu><button class="btn" id="episodesClose" type="button">إغلاق</button></menu>
 </dialog>
 
+<dialog id="irWizard">
+  <h2>ضبط ريموت الأشعة</h2>
+  <p class="muted" id="irProfile"></p>
+  <p class="hint">اضغط «جرّب» وراقب الجهاز؛ فإن استجاب اضغط «احفظ».</p>
+  <div id="irList" class="episodes"></div>
+  <details class="ir-import">
+    <summary>عندي ملف أكواد (lircd.conf أو irdb CSV)</summary>
+    <textarea id="irText" rows="4" placeholder="ألصق محتوى الملف هنا…"></textarea>
+    <button class="btn" id="irImport" type="button">استورد الأكواد</button>
+  </details>
+  <menu><button class="btn" id="irClose" type="button">إغلاق</button></menu>
+</dialog>
+
 <dialog id="settings">
   <form method="dialog">
     <h2>الإعدادات</h2>
@@ -113,6 +126,7 @@
     <div id="backendInfo" class="muted"></div>
     <menu>
       <button class="btn" id="discoverBtn" type="button">ابحث عن أجهزة</button>
+      <button class="btn" id="irBtn" type="button">ضبط الأشعة</button>
       <button class="btn primary" value="save">حفظ</button>
     </menu>
   </form>

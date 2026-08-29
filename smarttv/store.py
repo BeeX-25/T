@@ -19,7 +19,7 @@ class Store:
     def __init__(self, path):
         self.path = os.path.expanduser(path)
         self._lock = threading.Lock()
-        self.data = {"favorites": [], "resume": {}, "history": []}
+        self.data = {"favorites": [], "resume": {}, "history": [], "ir_profile": {}}
         self.load()
 
     # -- persistence ------------------------------------------------------
@@ -85,6 +85,16 @@ class Store:
                 added = True
             self.save()
         return {"favorite": added, "url": url}
+
+    # -- learned IR remote --------------------------------------------------
+    def ir_profile(self):
+        return dict(self.data.get("ir_profile") or {})
+
+    def save_ir_profile(self, profile):
+        with self._lock:
+            self.data["ir_profile"] = dict(profile or {})
+            self.save()
+        return self.ir_profile()
 
     # -- resume and history -----------------------------------------------
     def remember_position(self, url, position, duration=None, name=None):

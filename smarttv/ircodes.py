@@ -187,15 +187,63 @@ BRANDS = {
 
 
 def pattern_for(brand, key, brands=None, address=None):
-    """Return ``(frequency, durations)`` for one button of one brand."""
+    """Return ``(frequency, durations)`` for one button of one brand.
+
+    A button's value is either a command byte for one of the encoders
+    above, or - for remotes imported from a LIRC file - the pulse train
+    itself, already measured from the original remote.
+    """
     table = (brands or BRANDS).get(brand)
     if table is None:
         raise KeyError("unknown IR brand: %r" % (brand,))
     code = table["keys"].get(key)
     if code is None:
         raise KeyError("brand %r has no code for %r" % (brand, key))
-    encoder, frequency = PROTOCOLS[table["protocol"]]
+    if isinstance(code, (list, tuple)):
+        if not code:
+            raise KeyError("brand %r has an empty pattern for %r" % (brand, key))
+        return int(table.get("frequency", 38000)), [int(value) for value in code]
+    protocol = table.get("protocol")
+    if protocol not in PROTOCOLS:
+        raise KeyError("brand %r uses unknown protocol %r" % (brand, protocol))
+    encoder, frequency = PROTOCOLS[protocol]
     return (
         int(table.get("frequency", frequency)),
-        encoder(table["address"] if address is None else address, code),
+        encoder(table.get("address", 0) if address is None else address, code),
     )
+
+
+def candidates(brands=None, sweep_addresses=range(0, 16)):
+    """Profiles worth trying when a remote's codes are unknown.
+
+    Cheap receivers are usually NEC clones that differ only in address, so
+    after the named brands we sweep the low addresses with the generic NEC
+    code set - which is what "try them until the box blinks" needs.
+    """
+    tables = brands or BRANDS
+    found = []
+    for name, table in tables.items():
+        found.append(
+            {
+                "id": name,
+                "label": name,
+                "brand": name,
+                "protocol": table.get("protocol", "nec"),
+                "address": table.get("address"),
+            }
+        )
+    generic = tables.get("generic_nec")
+    if generic:
+        for address in sweep_addresses:
+            if address == generic.get("address"):
+                continue
+            found.append(
+                {
+                    "id": "generic_nec@%d" % address,
+                    "label": "NEC · address %d" % address,
+                    "brand": "generic_nec",
+                    "protocol": "nec",
+                    "address": address,
+                }
+            )
+    return found

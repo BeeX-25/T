@@ -185,6 +185,79 @@
     }).catch(function (error) { toast(error.message, true); });
   });
 
+  /* --- infrared setup wizard ------------------------------------------ */
+
+  function renderIrCandidates(data) {
+    el("irProfile").textContent = data.profile && data.profile.brand
+      ? "الحالي: " + data.profile.brand +
+        (data.profile.address != null ? " · العنوان " + data.profile.address : "")
+      : "لم يُضبط ريموت بعد";
+    var list = el("irList");
+    list.innerHTML = "";
+    (data.candidates || []).forEach(function (candidate) {
+      var row = document.createElement("div");
+      row.className = "ir-row" + (
+        data.profile && data.profile.brand === candidate.brand &&
+        data.profile.address === candidate.address ? " is-current" : ""
+      );
+
+      var label = document.createElement("span");
+      label.textContent = candidate.label;
+      row.appendChild(label);
+
+      var tryButton = document.createElement("button");
+      tryButton.type = "button";
+      tryButton.textContent = "جرّب";
+      tryButton.addEventListener("click", function () {
+        api("POST", "/api/ir/test", { brand: candidate.brand, address: candidate.address })
+          .then(function () { toast("أُرسل زر الطاقة — هل استجاب الجهاز؟"); })
+          .catch(function (error) { toast(error.message, true); });
+      });
+      row.appendChild(tryButton);
+
+      var saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.className = "save";
+      saveButton.textContent = "احفظ";
+      saveButton.addEventListener("click", function () {
+        api("POST", "/api/ir/save", { brand: candidate.brand, address: candidate.address })
+          .then(function () {
+            toast("تم الحفظ: " + candidate.label);
+            openIrWizard();
+          })
+          .catch(function (error) { toast(error.message, true); });
+      });
+      row.appendChild(saveButton);
+
+      list.appendChild(row);
+    });
+  }
+
+  function openIrWizard() {
+    el("irWizard").showModal();
+    el("irList").textContent = "جارٍ التحميل…";
+    api("GET", "/api/ir/candidates")
+      .then(renderIrCandidates)
+      .catch(function (error) { el("irList").textContent = error.message; });
+  }
+
+  el("irBtn").addEventListener("click", function () {
+    el("settings").close();
+    openIrWizard();
+  });
+  el("irClose").addEventListener("click", function () { el("irWizard").close(); });
+  el("irImport").addEventListener("click", function () {
+    var text = el("irText").value.trim();
+    if (!text) return toast("ألصق محتوى الملف أولاً", true);
+    api("POST", "/api/ir/import", { text: text })
+      .then(function (data) {
+        toast("استُوردت " + data.keys.length + " زراً باسم " + data.brand);
+        el("irText").value = "";
+        openIrWizard();
+      })
+      .catch(function (error) { toast(error.message, true); });
+  });
+
   /* keyboard control from a laptop */
   var KEYBOARD = {
     ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",

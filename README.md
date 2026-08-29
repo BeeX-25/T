@@ -17,7 +17,8 @@
 | **جوالك فيه بليستر IR** (شاومي/ريدمي/بوكو وكثير من هواوي) | لا شيء إطلاقاً | تحكم كامل بالتلفاز (تشغيل/صوت/قنوات/أزرار) — بدون بث |
 | **تلفازك ذكي أصلاً** (سامسونج/LG) لكن ريموته ضاع أو تريد أتمتته | لا شيء، فقط واي فاي | تحكم كامل عبر الشبكة + تشغيل التطبيقات |
 | **رسيفر Enigma2** (Vu+/Zgemma/Octagon/Dreambox…) | **لا شيء** | الأفضل: تحكم كامل + قنوات الرسيفر + تشغيل أي رابط عليه |
-| **رسيفر عادي أو صندوق أندرويد** موصول أصلاً | لا شيء | تحكم عبر IR أو HDMI‑CEC + مكتبة |
+| **رسيفر عادي بفيرموير مغلق** (ماجيك/نيو ورلد/1506/GX6605S) | لا شيء | تحكم بالأشعة فقط — لا يمكن تثبيت النظام عليه |
+| **صندوق أندرويد قديم** موصول أصلاً | لا شيء | تحكم + مكتبة كاملة |
 | لا هذا ولا ذاك | جوال أندرويد مستعمل رخيص | أرخص "صندوق بث" ممكن |
 
 > ملاحظة مهمة: بعض الجوالات لا تُخرج صورة عبر USB‑C (تحتاج دعم DisplayPort
@@ -141,6 +142,24 @@ ssh root@192.168.1.30 "sh /tmp/bridge/scripts/install_enigma2.sh"
 > إن لم يشتغل تشغيل الروابط، غيّر `service_type` من `4097` (GStreamer) إلى
 > `5002` (ExtEplayer3) حسب صورة الرسيفر لديك.
 
+### الرسيفرات ذات الفيرموير المغلق (Magic / New World / 1506 / GX6605S)
+
+الرسيفرات الرخيصة المنتشرة — ماجيك ٥٥٥، نيو ورلد، نيو ستار وأشباهها — تعمل
+بمعالجات **Sunplus 1506** أو **GX6605S** بفيرموير مغلق حجمه ميغابايتات
+قليلة: **لا لينكس ولا بايثون ولا صلاحية دخول ولا أي واجهة برمجية**، و«السوفت
+وير» الخاص بها ملف `.bin` من الشركة يُحمَّل عبر USB. لذلك:
+
+> **لا يمكن تثبيت هذا النظام (ولا أي نظام بديل) على هذه الرسيفرات.** لا يوجد
+> بديل مفتوح لهذه المعالجات، والتجربة تعني تعطيل الجهاز بلا مقابل.
+
+ما يمكن عمله معها:
+
+| الهدف | الطريقة |
+| --- | --- |
+| التحكم بها من الجوال | **الأشعة (IR)** — عبر معالج الضبط أدناه |
+| قنوات وأفلام ومسلسلات | خاصية IPTV/Xtream داخل الرسيفر نفسه إن وُجدت، أو جوال على HDMI |
+| مكتبة وبحث وأتمتة حقيقية | شغّل الخدمة على جوال أندرويد موصول بـ HDMI، وابقِ الرسيفر للقنوات الفضائية |
+
 ---
 
 ## اشتراك IPTV بصيغة Xtream Codes
@@ -227,9 +246,35 @@ ssh root@192.168.1.30 "sh /tmp/bridge/scripts/install_enigma2.sh"
 ومن عنده جهاز LIRC يستطيع استبدال أمر الإرسال كاملاً:
 `"command": "irsend SEND_ONCE tv {key}"`.
 
+### إن كان جهازك غير معروف (وهذا وضع أغلب الرسيفرات)
+
+أكواد الريموتات الرخيصة ليست في أي جدول جاهز، فأمامك طريقان — كلاهما داخل
+البرنامج:
+
+**١) معالج التجربة:** افتح ⚙ ← «ضبط الأشعة»، فتظهر قائمة مجموعات أكواد
+مرشّحة (الماركات المعروفة + مسح لعناوين NEC الشائعة). اضغط «جرّب» وراقب
+الجهاز، وعند استجابته اضغط «احفظ» — يُحفظ الاختيار ويبقى بعد إعادة التشغيل.
+ومن سطر الأوامر:
+
+```bash
+python3 -m smarttv --cmd ir-candidates      # اعرض المرشّحين
+python3 -m smarttv --cmd ir-test lg power   # جرّب واحداً
+python3 -m smarttv --cmd ir-save lg 4       # اعتمد ما نجح
+```
+
+**٢) استيراد أكواد ريموتك بالضبط:** إن وجدت ملف `lircd.conf` لريموتك أو ملف
+CSV من قاعدة **irdb**، استورده فيصير ريموتك مدعوماً بالكامل:
+
+```bash
+python3 -m smarttv --import-ir magic555.conf
+```
+
+يفهم البرنامج صيغتَي LIRC (`SPACE_ENC` و`RAW_CODES`) وصيغة irdb، ويعيد بناء
+النبضات بتوقيتات ريموتك الأصلي حرفياً بدل تخمين البروتوكول.
+
 **حدّ صريح:** الأشعة اتجاه واحد — لا يمكنها قراءة حالة التلفاز أبداً. لذلك
 هذه الواجهة لا تعلن دعم `power_status`، وتبقى قراءة الحالة من نصيب CEC أو
-الشبكة عند توفرها.
+الشبكة عند توفرها. وتحتاج أيضاً أن يكون الجوال موجّهاً نحو الجهاز.
 
 ---
 
@@ -263,6 +308,9 @@ python3 -m smarttv --discover                # ابحث عن تلفازات في
 | GET/POST | `/api/favorites` | عرض/تبديل المفضلة |
 | GET | `/api/resume` | «أكمل المشاهدة» والسجل |
 | GET | `/api/episodes` | `?series_id=` — حلقات مسلسل من Xtream عند الطلب |
+| GET | `/api/ir/candidates` | مجموعات أكواد مرشّحة + الريموت الحالي |
+| POST | `/api/ir/test` · `/api/ir/save` | جرّب مجموعة / اعتمدها واحفظها |
+| POST | `/api/ir/import` | استيراد `lircd.conf` أو irdb CSV |
 | POST/DELETE | `/api/sleep` | مؤقّت النوم |
 
 الردّ دائماً `{"ok": true, "data": …}` أو `{"ok": false, "error": "…"}`.
@@ -322,7 +370,8 @@ smarttv/
   sources.py      قراءة M3U و XMLTV و Xtream Codes وباقات الرسيفر
   catalog.py      التخزين المؤقت والبحث وتجميع المسلسلات
   store.py        المفضلة ومواضع المتابعة والسجل (كتابة ذرّية)
-  ircodes.py      توليد نبضات NEC / Samsung32 / SIRC / RC5
+  ircodes.py      توليد نبضات NEC / Samsung32 / SIRC / RC5 والمرشّحين
+  irimport.py     استيراد أكواد الريموتات من LIRC و irdb
   automation.py   cron مصغّر + مؤقّت النوم
   keys.py         خريطة أزرار موحّدة بين كل الواجهات
   web/            صفحة الريموت والمكتبة (PWA بالعربية)
@@ -334,10 +383,11 @@ smarttv/
 python3 -m unittest discover
 ```
 
-٢١٦ اختباراً تعمل بلا تلفاز وبلا رسيفر وبلا إنترنت وبلا أي مكتبة خارجية:
-توليد نبضات الأشعة، تحليل مخرجات `cec-client`، أوامر OpenWebif ومراجع
-الخدمة، واجهة Xtream، قوائم M3U ودليل XMLTV، منطق اختيار الواجهات، تعابير
-cron، بناء نوايا أندرويد، حماية المسارات والرمز السرّي.
+٢٤٢ اختباراً تعمل بلا تلفاز وبلا رسيفر وبلا إنترنت وبلا أي مكتبة خارجية:
+توليد نبضات الأشعة واستيراد ملفات LIRC/irdb، تحليل مخرجات `cec-client`،
+أوامر OpenWebif ومراجع الخدمة، واجهة Xtream، قوائم M3U ودليل XMLTV، منطق
+اختيار الواجهات، تعابير cron، بناء نوايا أندرويد، حماية المسارات والرمز
+السرّي.
 
 ---
 
@@ -350,7 +400,10 @@ service can drive it over the network or run *inside* it, list its bouquets
 on your phone, zap it, and make it play any stream URL. Otherwise control
 goes over **HDMI-CEC**, over **infrared**
 from a phone's IR blaster (NEC / Samsung32 / SIRC / RC5 encoders included),
-or over Wi-Fi to Samsung Tizen and LG webOS sets. Playback runs through
+or over Wi-Fi to Samsung Tizen and LG webOS sets. Remotes nobody has a
+table for - the cheap Sunplus 1506 / GX6605S receivers, say, which cannot
+run anything themselves - are handled by a trial wizard over candidate
+code sets, or by importing a `lircd.conf` or irdb CSV. Playback runs through
 **mpv** on Linux or through **VLC/YouTube intents** on an Android phone in
 Termux, which - plugged into HDMI - is the cheapest media box there is. A
 library layer reads your own **M3U playlists, XMLTV guides, Xtream Codes

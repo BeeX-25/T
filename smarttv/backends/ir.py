@@ -51,6 +51,9 @@ class IRBackend(TVBackend):
         frequency, pattern = ircodes.pattern_for(
             self.brand, key, brands=self.brands, address=self.address
         )
+        return self._send(frequency, pattern, key)
+
+    def _send(self, frequency, pattern, key):
         argv = self._argv(frequency, pattern, key)
         if not self.command_template and shutil.which(TERMUX_BINARY) is None:
             raise BackendUnavailable(
@@ -88,6 +91,59 @@ class IRBackend(TVBackend):
     def known_keys(self):
         table = self.brands.get(self.brand) or {}
         return sorted(table.get("keys", {}))
+
+    def candidates(self):
+        """What to try when the remote's codes are unknown."""
+        return ircodes.candidates(self.brands)
+
+    def profile(self):
+        return {"brand": self.brand, "address": self.address}
+
+    def register(self, table, name=None):
+        """Add an imported code set (from irdb or lircd.conf)."""
+        label = str(name or table.get("name") or "imported").lower()
+        self.brands[label] = {
+            key: value for key, value in table.items() if key != "name"
+        }
+        return label
+
+    def apply_profile(self, profile):
+        """Point this backend at a brand, an address, or an imported table.
+
+        This is what the setup wizard saves: a receiver whose codes were
+        found by trial keeps working across restarts without editing the
+        config by hand.
+        """
+        profile = dict(profile or {})
+        if profile.get("keys"):
+            brand = self.register(profile, profile.get("brand") or profile.get("name"))
+        else:
+            brand = str(profile.get("brand") or self.brand).lower()
+        if brand not in self.brands:
+            raise TVError("unknown IR brand: %r" % (brand,))
+        self.brand = brand
+        if "address" in profile and profile["address"] is not None:
+            self.address = int(profile["address"])
+        elif profile.get("keys"):
+            self.address = None
+        return self.profile()
+
+    def test(self, profile, key="power"):
+        """Fire one button from a candidate profile without adopting it."""
+        canonical = keymap.normalize(key) or key
+        brand = str((profile or {}).get("brand") or self.brand).lower()
+        address = (profile or {}).get("address")
+        table = self.brands.get(brand)
+        if table is None:
+            raise TVError("unknown IR brand: %r" % (brand,))
+        try:
+            frequency, pattern = ircodes.pattern_for(
+                brand, canonical, brands=self.brands, address=address
+            )
+        except KeyError as exc:
+            raise TVError(str(exc)) from exc
+        self._send(frequency, pattern, canonical)
+        return {"backend": self.name, "brand": brand, "address": address, "key": canonical}
 
     # -- commands ---------------------------------------------------------
     def _power(self, discrete):

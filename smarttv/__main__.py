@@ -5,6 +5,7 @@
     python3 -m smarttv --discover            # list TVs on the LAN
     python3 -m smarttv --cmd power on        # one-shot control from a script
     python3 -m smarttv --cmd search الجزيرة  # search the library
+    python3 -m smarttv --import-ir magic.conf # teach it your own remote
 """
 
 from __future__ import annotations
@@ -60,6 +61,18 @@ COMMANDS = {
     ),
     "refresh": lambda api, args: api.dispatch("POST", "/api/catalog/refresh", {}),
     "favorites": lambda api, args: api.dispatch("GET", "/api/favorites", {}),
+    "ir-candidates": lambda api, args: api.dispatch("GET", "/api/ir/candidates", {}),
+    "ir-test": lambda api, args: api.dispatch(
+        "POST",
+        "/api/ir/test",
+        {"brand": args[0], "address": int(args[1]) if len(args) > 2 else None,
+         "key": args[-1] if len(args) > 1 else "power"},
+    ),
+    "ir-save": lambda api, args: api.dispatch(
+        "POST",
+        "/api/ir/save",
+        {"brand": args[0], "address": int(args[1]) if len(args) > 1 else None},
+    ),
 }
 
 
@@ -75,6 +88,11 @@ def build_parser():
     )
     parser.add_argument(
         "--discover", action="store_true", help="scan the LAN for TVs and exit"
+    )
+    parser.add_argument(
+        "--import-ir",
+        metavar="FILE",
+        help="import a lircd.conf or irdb CSV for your remote, then exit",
     )
     parser.add_argument(
         "--cmd",
@@ -103,6 +121,27 @@ def main(argv=None):
         settings["server"]["port"] = args.port
 
     api = Api(settings, demo=args.demo, logger=log)
+
+    if args.import_ir:
+        try:
+            with open(args.import_ir, "r", encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError as exc:
+            log("cannot read %s: %s" % (args.import_ir, exc))
+            api.shutdown()
+            return 2
+        try:
+            result = api.dispatch("POST", "/api/ir/import", {"text": text})
+        except ApiError as exc:
+            log("import failed: %s" % exc)
+            api.shutdown()
+            return 1
+        finally:
+            pass
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        log("saved as brand %r - it is now the active remote" % result["brand"])
+        api.shutdown()
+        return 0
 
     if args.cmd:
         name, cmd_args = args.cmd[0], args.cmd[1:]
