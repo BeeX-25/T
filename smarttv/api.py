@@ -24,7 +24,7 @@ class Api:
         self.config = config
         self.logger = logger or (lambda message: None)
         self.registry = Registry.from_config(config["tv"], demo=demo)
-        self.player = create_player(config["player"])
+        self.player = create_player(self._player_config(config))
         self.store = Store(config.get("state_file", "~/.smarttv/state.json"))
         self.catalog = Catalog(config.get("catalog", {}), logger=self.logger)
         self.current = None
@@ -55,7 +55,25 @@ class Api:
             ("GET", "/api/favorites"): self.list_favorites,
             ("POST", "/api/favorites"): self.toggle_favorite,
             ("GET", "/api/resume"): self.list_resume,
+            ("GET", "/api/episodes"): self.list_episodes,
         }
+
+    @staticmethod
+    def _player_config(config):
+        """Let the Enigma2 player inherit the receiver's address.
+
+        The receiver is one box: repeating its host and password under
+        ``player`` would only be a way to get them out of sync.
+        """
+        player = dict(config.get("player") or {})
+        receiver = (config.get("tv") or {}).get("enigma2") or {}
+        settings = dict(player.get("enigma2") or {})
+        if not settings.get("host"):
+            for key in ("host", "port", "username", "password", "stream_port", "service_type"):
+                if receiver.get(key) not in (None, ""):
+                    settings[key] = receiver[key]
+        player["enigma2"] = settings
+        return player
 
     # -- lifecycle --------------------------------------------------------
     def start(self):
@@ -264,6 +282,19 @@ class Api:
             limit=payload.get("limit", 60),
             offset=payload.get("offset", 0),
         )
+
+    def list_episodes(self, payload):
+        """Episodes of one show; Xtream lists them only when asked."""
+        series_id = payload.get("series_id")
+        if not series_id:
+            raise ApiError("series_id is required")
+        try:
+            episodes = self.catalog.episodes(series_id, payload.get("source"))
+        except ValueError as exc:
+            raise ApiError(str(exc), status=404) from exc
+        except OSError as exc:
+            raise ApiError("could not reach the provider: %s" % exc, status=502) from exc
+        return {"series_id": series_id, "episodes": episodes}
 
     def refresh_catalog(self, payload):
         return self.catalog.refresh(force=True)

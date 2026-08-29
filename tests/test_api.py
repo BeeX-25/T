@@ -164,6 +164,16 @@ class LibraryTests(unittest.TestCase):
         data = self.api.dispatch("GET", "/api/resume", {})
         self.assertEqual(data["items"][0]["url"], "http://stream/1")
 
+    def test_episodes_need_a_series_id(self):
+        with self.assertRaises(ApiError) as caught:
+            self.api.dispatch("GET", "/api/episodes", {})
+        self.assertEqual(caught.exception.status, 400)
+
+    def test_episodes_without_an_xtream_source_say_so(self):
+        with self.assertRaises(ApiError) as caught:
+            self.api.dispatch("GET", "/api/episodes", {"series_id": "33"})
+        self.assertEqual(caught.exception.status, 404)
+
     def test_status_includes_the_catalog(self):
         status = self.api.dispatch("GET", "/api/status", {})
         self.assertEqual(status["catalog"]["sources"], 1)

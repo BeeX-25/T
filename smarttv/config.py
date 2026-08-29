@@ -22,7 +22,7 @@ DEFAULTS = {
     "tv": {
         # Backends are tried in this order; the first available one that
         # supports the requested command wins.
-        "order": ["cec", "ir", "samsung", "webos"],
+        "order": ["enigma2", "cec", "ir", "samsung", "webos"],
         "cec": {
             "enabled": True,
             "binary": "cec-client",
@@ -32,6 +32,19 @@ DEFAULTS = {
             "tv_address": 0,
             "source_address": 4,
             "timeout": 12,
+        },
+        "enigma2": {
+            # An Enigma2 satellite receiver (Vu+, Zgemma, Octagon,
+            # Dreambox, OpenATV/OpenPLi images) through its OpenWebif API.
+            "enabled": False,
+            "host": "",
+            "port": 80,
+            "username": "",
+            "password": "",
+            "stream_port": 8001,
+            "service_type": 4097,
+            "deep_standby": False,
+            "timeout": 10,
         },
         "ir": {
             # For a phone with an IR blaster: no cable, no adapter, nothing
@@ -75,6 +88,16 @@ DEFAULTS = {
         "android": {
             "app": "vlc",
             "use_input_keyevents": False,
+        },
+        "enigma2": {
+            # Playback happens on the receiver itself; host defaults to the
+            # one configured under tv.enigma2 when left empty.
+            "host": "",
+            "port": 80,
+            "username": "",
+            "password": "",
+            "stream_port": 8001,
+            "service_type": 4097,
         },
     },
     # Favourites, resume points and history live here.

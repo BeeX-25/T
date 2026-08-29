@@ -86,6 +86,23 @@ WEBOS_KEYS = {
     **{"num%d" % n: str(n) for n in range(10)},
 }
 
+# Enigma2 receivers take Linux input event codes over OpenWebif.
+ENIGMA2_KEYS = {
+    "power": 116,
+    "up": 103, "down": 108, "left": 105, "right": 106,
+    "select": 352, "back": 174, "exit": 174, "menu": 139,
+    "home": 102, "info": 358,
+    "volume_up": 115, "volume_down": 114, "mute": 113,
+    "channel_up": 402, "channel_down": 403,
+    "play": 207, "pause": 119, "play_pause": 164, "stop": 128,
+    "fast_forward": 208, "rewind": 168, "record": 167,
+    "red": 398, "green": 399, "yellow": 400, "blue": 401,
+    "tv": 377, "radio": 385, "epg": 365, "text": 388,
+    "audio": 392, "subtitle": 370,
+    "num0": 11, "num1": 2, "num2": 3, "num3": 4, "num4": 5,
+    "num5": 6, "num6": 7, "num7": 8, "num8": 9, "num9": 10,
+}
+
 # Aliases so callers can send whatever the remote on their desk says.
 ALIASES = {
     "ok": "select",
@@ -99,6 +116,9 @@ ALIASES = {
     "ch-": "channel_down",
     "ff": "fast_forward",
     "rew": "rewind",
+    "guide": "epg",
+    "teletext": "text",
+    "playpause": "play_pause",
 }
 
 
@@ -108,4 +128,5 @@ def normalize(name):
         return None
     key = str(name).strip().lower().replace("-", "_").replace(" ", "_")
     key = ALIASES.get(key, key)
-    return key if key in CEC_CODES or key in SAMSUNG_KEYS or key in WEBOS_KEYS else None
+    known = (CEC_CODES, SAMSUNG_KEYS, WEBOS_KEYS, ENIGMA2_KEYS)
+    return key if any(key in mapping for mapping in known) else None

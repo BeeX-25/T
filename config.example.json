@@ -7,7 +7,18 @@
   "state_file": "~/.smarttv/state.json",
 
   "tv": {
-    "order": ["cec", "ir", "samsung", "webos"],
+    "order": ["enigma2", "cec", "ir", "samsung", "webos"],
+
+    "enigma2": {
+      "enabled": false,
+      "host": "192.168.1.30",
+      "port": 80,
+      "username": "root",
+      "password": "",
+      "stream_port": 8001,
+      "service_type": 4097,
+      "deep_standby": false
+    },
 
     "cec": {
       "enabled": true,
@@ -65,6 +76,14 @@
     "android": {
       "app": "vlc",
       "use_input_keyevents": false
+    },
+    "enigma2": {
+      "host": "",
+      "port": 80,
+      "username": "",
+      "password": "",
+      "stream_port": 8001,
+      "service_type": 4097
     }
   },
 
@@ -83,6 +102,22 @@
         "name": "دليل البرامج",
         "type": "xmltv",
         "url": "https://iptv-org.github.io/epg/guides/ar.xml"
+      },
+      {
+        "name": "قنوات الرسيفر",
+        "type": "enigma2",
+        "host": "192.168.1.30",
+        "port": 80,
+        "stream_port": 8001
+      },
+      {
+        "name": "اشتراكي (Xtream)",
+        "type": "xtream",
+        "url": "http://provider.example:8080",
+        "username": "",
+        "password": "",
+        "kinds": ["live", "movies", "series"],
+        "live_extension": "ts"
       },
       {
         "name": "أفلامي المحلية",

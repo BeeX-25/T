@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from .android import AndroidPlayer, is_android
 from .base import Player, PlayerError
+from .enigma2 import Enigma2Player
 from .mpv import MpvPlayer
 
-PLAYER_CLASSES = {"mpv": MpvPlayer, "android": AndroidPlayer}
+PLAYER_CLASSES = {"mpv": MpvPlayer, "android": AndroidPlayer, "enigma2": Enigma2Player}
 
 __all__ = [
     "AndroidPlayer",
+    "Enigma2Player",
     "MpvPlayer",
     "Player",
     "PlayerError",

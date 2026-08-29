@@ -218,6 +218,13 @@
     }, "جارٍ التشغيل: " + (item.name || ""));
   }
 
+  function query(params) {
+    return Object.keys(params)
+      .filter(function (key) { return params[key] !== "" && params[key] != null; })
+      .map(function (key) { return key + "=" + encodeURIComponent(params[key]); })
+      .join("&");
+  }
+
   function initials(name) {
     // "الجزيرة" starts with the article, so two raw letters say nothing;
     // drop it before taking the badge letters.
@@ -288,11 +295,14 @@
     return card;
   }
 
-  function showEpisodes(show) {
-    el("episodesTitle").textContent = show.name;
+  function renderEpisodes(show, episodes) {
     var list = el("episodesList");
     list.innerHTML = "";
-    show.episodes.forEach(function (episode) {
+    if (!episodes.length) {
+      list.textContent = "لا توجد حلقات";
+      return;
+    }
+    episodes.forEach(function (episode) {
       var button = document.createElement("button");
       button.type = "button";
       var label = episode.season && episode.episode
@@ -305,7 +315,25 @@
       });
       list.appendChild(button);
     });
+  }
+
+  function showEpisodes(show) {
+    el("episodesTitle").textContent = show.name;
     el("episodes").showModal();
+    if (show.episodes && show.episodes.length) {
+      renderEpisodes(show, show.episodes);
+      return;
+    }
+    // An Xtream provider lists episodes only when the show is opened.
+    el("episodesList").textContent = "جارٍ تحميل الحلقات…";
+    api("GET", "/api/episodes?" + query({ series_id: show.series_id, source: show.source }))
+      .then(function (data) {
+        show.episodes = data.episodes || [];
+        renderEpisodes(show, show.episodes);
+      })
+      .catch(function (error) {
+        el("episodesList").textContent = error.message;
+      });
   }
 
   function renderGroups(groups) {
@@ -323,13 +351,6 @@
       });
       box.appendChild(chip);
     });
-  }
-
-  function query(params) {
-    return Object.keys(params)
-      .filter(function (key) { return params[key] !== "" && params[key] != null; })
-      .map(function (key) { return key + "=" + encodeURIComponent(params[key]); })
-      .join("&");
   }
 
   function loadLibrary(reset) {
@@ -370,7 +391,9 @@
       var results = el("results");
       (data.items || []).forEach(function (item) {
         var extra = "";
-        if (library.kind === "series") extra = (item.episode_count || 0) + " حلقة";
+        if (library.kind === "series") {
+          extra = item.episode_count == null ? "الحلقات" : item.episode_count + " حلقة";
+        }
         else if (item.group) extra = item.group;
         // A show has no stream of its own - it opens its episode list.
         var card = library.kind === "series"

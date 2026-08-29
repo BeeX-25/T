@@ -16,7 +16,8 @@
 | **جوال أندرويد قديم** (ولو مكسور الشاشة) | كبل/محوّل USB‑C → HDMI (بسعر وجبة) | كل شيء: بث + ريموت + مكتبة |
 | **جوالك فيه بليستر IR** (شاومي/ريدمي/بوكو وكثير من هواوي) | لا شيء إطلاقاً | تحكم كامل بالتلفاز (تشغيل/صوت/قنوات/أزرار) — بدون بث |
 | **تلفازك ذكي أصلاً** (سامسونج/LG) لكن ريموته ضاع أو تريد أتمتته | لا شيء، فقط واي فاي | تحكم كامل عبر الشبكة + تشغيل التطبيقات |
-| **مستقبِل/رسيفر أو صندوق أندرويد قديم** موصول أصلاً | لا شيء | تحكم عبر HDMI‑CEC + مكتبة |
+| **رسيفر Enigma2** (Vu+/Zgemma/Octagon/Dreambox…) | **لا شيء** | الأفضل: تحكم كامل + قنوات الرسيفر + تشغيل أي رابط عليه |
+| **رسيفر عادي أو صندوق أندرويد** موصول أصلاً | لا شيء | تحكم عبر IR أو HDMI‑CEC + مكتبة |
 | لا هذا ولا ذاك | جوال أندرويد مستعمل رخيص | أرخص "صندوق بث" ممكن |
 
 > ملاحظة مهمة: بعض الجوالات لا تُخرج صورة عبر USB‑C (تحتاج دعم DisplayPort
@@ -28,11 +29,12 @@
 
 ```
 جوالك ──HTTP──▶ الخدمة (على جوال قديم أو أي جهاز)
+                   ├── enigma2  → رسيفر لينكس عبر OpenWebif (شبكة)
                    ├── ir       → أشعة تحت حمراء من بليستر الجوال (بدون أي كبل)
                    ├── cec      → عبر كبل HDMI نفسه (تشغيل/إطفاء/أزرار)
                    ├── samsung  → واي فاي (Tizen)
                    ├── webos    → واي فاي (LG)
-                   └── player   → VLC على الأندرويد أو mpv على اللينكس
+                   └── player   → الرسيفر نفسه، أو VLC على الأندرويد، أو mpv على اللينكس
 ```
 
 ---
@@ -63,6 +65,12 @@ termux-wake-lock && python3 -m smarttv --config ~/.smarttv/config.json
 **لعرض الصورة على التلفاز:** وصّل الجوال بالتلفاز عبر USB‑C → HDMI، وحين
 تضغط أي عنصر في المكتبة سيفتح في VLC على شاشة التلفاز مباشرة.
 
+### على رسيفر Enigma2
+
+```bash
+ssh root@RECEIVER "sh /tmp/bridge/scripts/install_enigma2.sh"   # التفاصيل أدناه
+```
+
 ### على راسبيري باي أو حاسوب لينكس
 
 ```bash
@@ -74,6 +82,89 @@ sudo sh scripts/install.sh     # يثبّت cec-utils و mpv وخدمة systemd
 ```bash
 python3 -m smarttv --demo      # تلفاز وهمي، الواجهة تعمل بالكامل
 ```
+
+---
+
+## على رسيفر Enigma2 (أفضل حالة على الإطلاق)
+
+أغلب الرسيفرات المنتشرة (Vu+، Zgemma، Octagon، Gigablue، Dreambox، وكل ما
+يعمل بصور OpenATV/OpenPLi/OpenViX) هي **أجهزة لينكس** فيها بايثون وواجهة
+**OpenWebif**. وهذا يعني أن الرسيفر:
+
+- موصول بالتلفاز أصلاً — لا تحتاج كبلاً ولا محوّلاً ولا جوالاً إضافياً،
+- يعرف كل قنواتك (الباقات) ويستطيع تشغيل أي رابط إنترنت على شاشته،
+- ويمكن تشغيل هذه الخدمة **بداخله** لأنها بلا أي مكتبة خارجية.
+
+### الطريقة (أ): التحكم به عبر الشبكة
+
+شغّل الخدمة على أي جهاز (جوال/حاسوب) وضع في `config.json`:
+
+```json
+"tv": {
+  "order": ["enigma2"],
+  "enigma2": {
+    "enabled": true,
+    "host": "192.168.1.30",
+    "username": "root",
+    "password": "كلمة سر الرسيفر إن وُجدت"
+  }
+},
+"player": { "backend": "enigma2" },
+"catalog": {
+  "sources": [
+    { "name": "قنوات الرسيفر", "type": "enigma2", "host": "192.168.1.30" }
+  ]
+}
+```
+
+### الطريقة (ب): تشغيل الخدمة داخل الرسيفر
+
+```bash
+scp -r smarttv config.example.json scripts root@192.168.1.30:/tmp/bridge/
+ssh root@192.168.1.30 "sh /tmp/bridge/scripts/install_enigma2.sh"
+```
+
+يثبّتها في `/usr/local/smarttv` مع سكربت إقلاع، ويجعل `host` هو `127.0.0.1`.
+
+### ماذا تحصل
+
+| الشيء | كيف يعمل |
+| --- | --- |
+| ريموت كامل | كل أزرار الرسيفر (بما فيها الملوّنة و EPG والنص) عبر `api/remotecontrol` |
+| الاستعداد والتشغيل | `api/powerstate` — و«الاستعداد العميق» اختياري لأن الرجوع منه يحتاج زر الجهاز |
+| قراءة الحالة | يعرف فعلاً إن كان الرسيفر يعمل أو في وضع الاستعداد (عكس الأشعة) |
+| قنوات الرسيفر في جوالك | تُقرأ الباقات من `api/getallservices`، والضغط على قناة **يبدّل الرسيفر إليها** |
+| مشاهدة القناة على الجوال | كل قناة لها أيضاً رابط بث `http://الرسيفر:8001/<sref>` يفتح في VLC |
+| تشغيل أي رابط على التلفاز | يُغلَّف الرابط في مرجع خدمة `4097:...` ويُرسل للرسيفر |
+| رسالة على الشاشة | `api/message` — مفيدة للتنبيهات والأتمتة |
+
+> إن لم يشتغل تشغيل الروابط، غيّر `service_type` من `4097` (GStreamer) إلى
+> `5002` (ExtEplayer3) حسب صورة الرسيفر لديك.
+
+---
+
+## اشتراك IPTV بصيغة Xtream Codes
+
+معظم الاشتراكات تُباع بواجهة **Xtream Codes** (رابط + مستخدم + كلمة سر).
+أضفه كمصدر واحد فتحصل على القنوات والأفلام والمسلسلات مع تصنيفاتها:
+
+```json
+{
+  "name": "اشتراكي",
+  "type": "xtream",
+  "url": "http://provider.example:8080",
+  "username": "USER",
+  "password": "PASS",
+  "kinds": ["live", "movies", "series"]
+}
+```
+
+حلقات المسلسل لا تُجلب مسبقاً (اشتراك كبير = مئات الطلبات)، بل عند فتح
+المسلسل فقط عبر `GET /api/episodes?series_id=…`.
+
+> بيانات اشتراكك تبقى في ملف إعداداتك، لكن روابط التشغيل تحتوي المستخدم
+> وكلمة السر بطبيعة البروتوكول — فعّل `server.auth_token` إن كانت شبكتك
+> مشتركة مع آخرين.
 
 ---
 
@@ -171,6 +262,7 @@ python3 -m smarttv --discover                # ابحث عن تلفازات في
 | GET | `/api/epg` | `?channel=tvg-id` — الآن والتالي |
 | GET/POST | `/api/favorites` | عرض/تبديل المفضلة |
 | GET | `/api/resume` | «أكمل المشاهدة» والسجل |
+| GET | `/api/episodes` | `?series_id=` — حلقات مسلسل من Xtream عند الطلب |
 | POST/DELETE | `/api/sleep` | مؤقّت النوم |
 
 الردّ دائماً `{"ok": true, "data": …}` أو `{"ok": false, "error": "…"}`.
@@ -192,14 +284,14 @@ python3 -m smarttv --discover                # ابحث عن تلفازات في
 
 ## ما الذي يعمل على كل جهاز (بدون مبالغة)
 
-| القدرة | جوال أندرويد (Termux) | لينكس / راسبيري باي |
-| --- | --- | --- |
-| تشغيل رابط على الشاشة | ✅ عبر VLC / YouTube | ✅ عبر mpv |
-| إيقاف مؤقت وتقديم | ⚠️ يحتاج روت أو ADB (`use_input_keyevents`) | ✅ كامل |
-| مستوى الصوت | ✅ عبر Termux:API | ✅ |
-| إيقاف التشغيل | ⚠️ بالعودة للشاشة الرئيسية | ✅ إغلاق فعلي |
-| متابعة من حيث توقفت | ⚠️ يديرها VLC نفسه | ✅ يخزّنها المشروع |
-| التحكم بالتلفاز | IR / CEC / شبكة | CEC / شبكة |
+| القدرة | رسيفر Enigma2 | جوال أندرويد (Termux) | لينكس / راسبيري باي |
+| --- | --- | --- | --- |
+| تشغيل رابط على الشاشة | ✅ عبر الرسيفر نفسه | ✅ عبر VLC / YouTube | ✅ عبر mpv |
+| إيقاف مؤقت وتقديم | ✅ بأزرار الريموت | ⚠️ يحتاج روت أو ADB | ✅ كامل |
+| مستوى الصوت | ✅ مطلق (0‑100) | ✅ عبر Termux:API | ✅ |
+| متابعة من حيث توقفت | ⚠️ الرسيفر لا يعطي موضع التشغيل | ⚠️ يديرها VLC نفسه | ✅ يخزّنها المشروع |
+| قراءة حالة التلفاز/الجهاز | ✅ | حسب الواجهة | حسب الواجهة |
+| التحكم | شبكة (OpenWebif) | IR / CEC / شبكة | CEC / شبكة |
 
 أندرويد يمنع تطبيقاً من حقن أزرار في تطبيق آخر بدون صلاحية shell — لذلك
 تُعلن الواجهة عن `pause` و`seek` فقط عند تفعيل `use_input_keyevents`، بدل
@@ -224,9 +316,11 @@ smarttv/
   server.py       خادم HTTP بالمكتبة القياسية (API + صفحة الريموت)
   api.py          طبقة الخدمة: المسارات والتحقق وتتبّع «أكمل المشاهدة»
   registry.py     اختيار الواجهة المناسبة لكل أمر
-  backends/       cec · ir · samsung · webos · dummy
-  players/        mpv (لينكس) · android (Termux) خلف واجهة واحدة
-  catalog.py      قوائم M3U ودليل XMLTV وبحث وتجميع المسلسلات
+  backends/       cec · ir · enigma2 · samsung · webos · dummy
+  players/        mpv (لينكس) · android (Termux) · enigma2 (الرسيفر)
+  openwebif.py    عميل واجهة الرسيفر (يستعمله التحكم والتشغيل معاً)
+  sources.py      قراءة M3U و XMLTV و Xtream Codes وباقات الرسيفر
+  catalog.py      التخزين المؤقت والبحث وتجميع المسلسلات
   store.py        المفضلة ومواضع المتابعة والسجل (كتابة ذرّية)
   ircodes.py      توليد نبضات NEC / Samsung32 / SIRC / RC5
   automation.py   cron مصغّر + مؤقّت النوم
@@ -240,25 +334,31 @@ smarttv/
 python3 -m unittest discover
 ```
 
-١٥٨ اختباراً تعمل بلا تلفاز وبلا إنترنت وبلا أي مكتبة خارجية: توليد نبضات
-الأشعة، تحليل مخرجات `cec-client`، قوائم M3U ودليل XMLTV، منطق اختيار
-الواجهات، تعابير cron، بناء نوايا أندرويد، حماية المسارات والرمز السرّي.
+٢١٦ اختباراً تعمل بلا تلفاز وبلا رسيفر وبلا إنترنت وبلا أي مكتبة خارجية:
+توليد نبضات الأشعة، تحليل مخرجات `cec-client`، أوامر OpenWebif ومراجع
+الخدمة، واجهة Xtream، قوائم M3U ودليل XMLTV، منطق اختيار الواجهات، تعابير
+cron، بناء نوايا أندرويد، حماية المسارات والرمز السرّي.
 
 ---
 
 ## English summary
 
 A dependency-free Python service that turns a TV into a smart one using
-hardware you already own. Control goes over **HDMI-CEC**, over **infrared**
+hardware you already own. Best case is an **Enigma2 satellite receiver**:
+it is already on the HDMI port, runs Linux, and exposes OpenWebif - so the
+service can drive it over the network or run *inside* it, list its bouquets
+on your phone, zap it, and make it play any stream URL. Otherwise control
+goes over **HDMI-CEC**, over **infrared**
 from a phone's IR blaster (NEC / Samsung32 / SIRC / RC5 encoders included),
 or over Wi-Fi to Samsung Tizen and LG webOS sets. Playback runs through
 **mpv** on Linux or through **VLC/YouTube intents** on an Android phone in
 Termux, which - plugged into HDMI - is the cheapest media box there is. A
-library layer reads your own **M3U playlists and XMLTV guides** (the
-project ships no content) and turns them into a searchable, favouritable,
+library layer reads your own **M3U playlists, XMLTV guides, Xtream Codes
+subscriptions and receiver bouquets** (the project ships no content) and turns them into a searchable, favouritable,
 resumable catalogue on a phone-friendly web remote.
 
 ```bash
+sh scripts/install_enigma2.sh  # on an Enigma2 receiver
 sh scripts/install_termux.sh   # Android phone
 sudo sh scripts/install.sh     # Debian / Raspberry Pi OS
 python3 -m smarttv --demo      # no hardware at all
