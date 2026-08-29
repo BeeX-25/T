@@ -180,6 +180,74 @@ class LibraryTests(unittest.TestCase):
         self.assertIsNone(status["now_playing"])
 
 
+class MacroTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        settings = isolated_settings(self.folder.name)
+        settings["macro_delay"] = 0
+        settings["macros"] = [
+            {"name": "الفضائيات", "steps": ["power_on", "digits:103"]},
+        ]
+        settings["catalog"]["sources"] = [
+            {
+                "type": "channels",
+                "name": "رسيفري",
+                "items": [{"name": "MBC 1", "number": 103}],
+            }
+        ]
+        self.api = Api(settings, demo=True)
+        self.addCleanup(self.api.shutdown)
+        self.tv = self.api.registry.get("dummy")
+
+    def test_macros_are_listed(self):
+        names = [m["name"] for m in self.api.dispatch("GET", "/api/macros", {})["macros"]]
+        self.assertEqual(names, ["الفضائيات"])
+
+    def test_running_a_named_macro_presses_the_keys(self):
+        result = self.api.dispatch("POST", "/api/macro", {"name": "الفضائيات"})
+        self.assertEqual(result["steps"], 4)
+        self.assertFalse(result["confirmed"])
+        self.assertEqual(self.tv.log, ["power_on", "key:num1", "key:num0", "key:num3"])
+
+    def test_ad_hoc_steps_are_allowed(self):
+        self.api.dispatch("POST", "/api/macro", {"steps": ["up", "select"]})
+        self.assertEqual(self.tv.log, ["key:up", "key:select"])
+
+    def test_unknown_macro_is_404(self):
+        with self.assertRaises(ApiError) as caught:
+            self.api.dispatch("POST", "/api/macro", {"name": "لا يوجد"})
+        self.assertEqual(caught.exception.status, 404)
+
+    def test_macro_needs_something_to_run(self):
+        with self.assertRaises(ApiError):
+            self.api.dispatch("POST", "/api/macro", {})
+
+    def test_a_bad_step_is_a_client_error(self):
+        with self.assertRaises(ApiError):
+            self.api.dispatch("POST", "/api/macro", {"steps": ["wait:soon"]})
+
+    def test_a_channel_from_the_list_is_dialled_not_streamed(self):
+        item = self.api.dispatch("GET", "/api/catalog", {})["items"][0]
+        result = self.api.dispatch(
+            "POST", "/api/cast", {"url": item["url"], "name": item["name"]}
+        )
+        self.assertEqual(result["sent"], ["key:num1", "key:num0", "key:num3", "key:select"])
+        self.assertEqual(self.tv.log[-1], "key:select")
+
+    def test_status_marks_a_dialled_channel_as_unconfirmed(self):
+        item = self.api.dispatch("GET", "/api/catalog", {})["items"][0]
+        self.api.dispatch("POST", "/api/cast", {"url": item["url"], "name": item["name"]})
+        now_playing = self.api.dispatch("GET", "/api/status", {})["now_playing"]
+        self.assertEqual(now_playing["name"], "MBC 1")
+        self.assertFalse(now_playing["confirmed"])
+
+    def test_dialling_is_recorded_in_history(self):
+        item = self.api.dispatch("GET", "/api/catalog", {})["items"][0]
+        self.api.dispatch("POST", "/api/cast", {"url": item["url"], "name": item["name"]})
+        self.assertEqual(self.api.store.history()[0]["name"], "MBC 1")
+
+
 class InfraredWizardTests(unittest.TestCase):
     LIRC = (
         "begin remote\n  name MAGIC555\n  bits 16\n  flags SPACE_ENC\n"

@@ -264,6 +264,63 @@ def load_xtream_episodes(source, fetch, series_id):
     return episodes
 
 
+# --- numbered channel lists (devices driven by their remote) --------------
+
+
+def load_channels(source, fetch):
+    """A channel list for a box that only understands its own remote.
+
+    Each item plays by dialling its number on the remote, so a receiver
+    with no API still gets a searchable channel grid on the phone.
+    """
+    from .macros import digits
+
+    name = source.get("name") or "channels"
+    confirm = source.get("confirm", "select")
+    entries = source.get("items")
+    if not entries:
+        text = fetch(source_target(source))
+        stripped = (text or "").lstrip()
+        if stripped.startswith("["):
+            entries = json.loads(text)
+        else:
+            entries = []
+            for line in (text or "").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = [part.strip() for part in line.split(",")]
+                if len(parts) < 2:
+                    continue
+                entries.append(
+                    {
+                        "name": parts[0],
+                        "number": parts[1],
+                        "group": parts[2] if len(parts) > 2 else "",
+                    }
+                )
+    items = []
+    for entry in entries or []:
+        number = str(entry.get("number", "")).strip()
+        if not number.isdigit():
+            continue
+        steps = digits(number, confirm)
+        items.append(
+            {
+                "name": entry.get("name") or ("قناة %s" % number),
+                "logo": entry.get("logo", ""),
+                "tvg_id": entry.get("tvg_id", ""),
+                "group": entry.get("group", "") or source.get("group", ""),
+                "kind": source.get("kind", "live"),
+                "source": name,
+                "number": number,
+                # Played by pressing buttons, not by streaming anything.
+                "url": "macro:" + ",".join(steps),
+            }
+        )
+    return items
+
+
 # --- Enigma2 receiver -----------------------------------------------------
 
 
@@ -310,12 +367,16 @@ def load_source(source, fetch):
     kind = str(source.get("type", "m3u")).lower()
     if kind in ("m3u", "m3u8", "playlist", "xmltv") and not source_target(source):
         raise ValueError("source needs a url or a path")
+    if kind in ("channels", "numbers") and not source.get("items") and not source_target(source):
+        raise ValueError("a channel list needs items, a url or a path")
     if kind == "xmltv":
         return {"items": [], "guide": parse_xmltv(fetch(source_target(source)))}
     if kind == "xtream":
         return {"items": load_xtream(source, fetch), "guide": {}}
     if kind == "enigma2":
         return {"items": load_enigma2(source, fetch), "guide": {}}
+    if kind in ("channels", "numbers"):
+        return {"items": load_channels(source, fetch), "guide": {}}
     if kind in ("m3u", "m3u8", "playlist"):
         return {
             "items": parse_m3u(

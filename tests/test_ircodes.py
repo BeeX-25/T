@@ -105,6 +105,56 @@ class IRBackendTests(unittest.TestCase):
 
         self.assertFalse(IRBackend({"brand": "nokia", "command": "x {key}"}).available())
 
+    def test_http_transport_posts_the_pattern_to_a_bridge(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from smarttv.backends.ir import IRBackend
+
+        seen = []
+
+        class Bridge(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                seen.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Bridge)
+        thread = threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+        )
+        thread.start()
+        self.addCleanup(thread.join, 3)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        host, port = server.server_address
+        backend = IRBackend(
+            {
+                "brand": "lg",
+                "url": "http://%s:%d/ir?freq={frequency}&pattern={pattern}" % (host, port),
+            }
+        )
+        self.assertTrue(backend.available())
+        result = backend.send_key("power")
+        self.assertEqual(result["via"], "http")
+        self.assertIn("freq=38000", seen[0])
+        self.assertIn("pattern=9000,4500", seen[0])
+
+    def test_an_unreachable_bridge_is_unavailable_not_broken(self):
+        from smarttv.backends.base import BackendUnavailable
+        from smarttv.backends.ir import IRBackend
+
+        backend = IRBackend(
+            {"brand": "lg", "url": "http://127.0.0.1:1/ir?p={pattern}", "timeout": 1}
+        )
+        with self.assertRaises(BackendUnavailable):
+            backend.send_key("power")
+
     def test_infrared_reports_no_power_status(self):
         from smarttv.backends.base import Capability
 

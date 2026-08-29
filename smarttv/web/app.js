@@ -69,7 +69,10 @@
 
     var player = data.player || {};
     var now = el("nowPlaying");
-    if (player.running) {
+    if (data.now_playing && data.now_playing.confirmed === false) {
+      // Dialled on a remote-only device: nothing confirms it arrived.
+      now.textContent = "أُرسل إلى الجهاز: " + data.now_playing.name + " (بلا تأكيد)";
+    } else if (player.running) {
       var label = (data.now_playing && data.now_playing.name) || player.title || "قيد التشغيل";
       var clock = player.position != null && player.duration
         ? " (" + formatClock(player.position) + " / " + formatClock(player.duration) + ")"
@@ -113,6 +116,18 @@
         sources.appendChild(chip);
       })(index);
     }
+
+    var macros = data.macros || [];
+    macros.forEach(function (name) {
+      var chip = document.createElement("button");
+      chip.className = "chip";
+      chip.type = "button";
+      chip.textContent = "▶ " + name;
+      chip.addEventListener("click", function () {
+        send("POST", "/api/macro", { name: name }, "جارٍ تنفيذ: " + name);
+      });
+      box.appendChild(chip);
+    });
 
     el("backendInfo").textContent = (data.backends || [])
       .map(function (b) { return b.name + (b.available ? " ✓" : " ✗"); })

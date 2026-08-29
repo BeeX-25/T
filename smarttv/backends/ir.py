@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from .. import ircodes, keys as keymap
 from .base import BackendUnavailable, Capability, TVBackend, TVError
@@ -33,9 +36,22 @@ class IRBackend(TVBackend):
         self.brands = dict(ircodes.BRANDS)
         for name, table in (self.settings.get("brands") or {}).items():
             self.brands[str(name).lower()] = table
-        # LIRC users (irsend) and anyone with their own transmitter can
-        # substitute the command; {frequency}, {pattern} and {key} are filled in.
+        # Three ways to actually emit the pulses:
+        #   termux  - the phone's own IR blaster (default)
+        #   command - any shell command, e.g. LIRC's irsend
+        #   http    - a Wi-Fi IR bridge (an ESP8266 for a couple of dollars),
+        #             which is the answer when the phone has no blaster
+        # {frequency}, {pattern} and {key} are filled into whichever is used.
         self.command_template = self.settings.get("command", "")
+        self.url_template = self.settings.get("url", "")
+        self.http_method = str(self.settings.get("method", "GET")).upper()
+        self.body_template = self.settings.get("body", "")
+        self.transport = str(
+            self.settings.get(
+                "transport",
+                "http" if self.url_template else "command" if self.command_template else "termux",
+            )
+        ).lower()
 
     # -- plumbing ---------------------------------------------------------
     def _argv(self, frequency, pattern, key):
@@ -47,6 +63,30 @@ class IRBackend(TVBackend):
             ]
         return [TERMUX_BINARY, "-f", str(int(frequency)), joined]
 
+    def _fill(self, template, frequency, pattern, key):
+        return template.format(
+            frequency=int(frequency),
+            pattern=",".join(str(int(value)) for value in pattern),
+            key=key,
+        )
+
+    def _send_http(self, frequency, pattern, key):
+        url = self._fill(self.url_template, frequency, pattern, key)
+        data = None
+        if self.body_template:
+            data = self._fill(self.body_template, frequency, pattern, key).encode("utf-8")
+        request = urllib.request.Request(url, data=data, method=self.http_method)
+        if data:
+            request.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                response.read(4096)
+        except urllib.error.HTTPError as exc:
+            raise TVError("IR bridge returned HTTP %s" % exc.code) from exc
+        except OSError as exc:
+            raise BackendUnavailable("cannot reach the IR bridge: %s" % exc) from exc
+        return {"backend": self.name, "key": key, "brand": self.brand, "via": "http"}
+
     def _transmit(self, key):
         frequency, pattern = ircodes.pattern_for(
             self.brand, key, brands=self.brands, address=self.address
@@ -54,6 +94,10 @@ class IRBackend(TVBackend):
         return self._send(frequency, pattern, key)
 
     def _send(self, frequency, pattern, key):
+        if self.transport == "http":
+            for _ in range(max(1, self.repeat)):
+                result = self._send_http(frequency, pattern, key)
+            return result
         argv = self._argv(frequency, pattern, key)
         if not self.command_template and shutil.which(TERMUX_BINARY) is None:
             raise BackendUnavailable(
@@ -80,8 +124,10 @@ class IRBackend(TVBackend):
     def available(self):
         if self.brand not in self.brands:
             return False
-        if self.command_template:
-            return True
+        if self.transport == "http":
+            return bool(self.url_template)
+        if self.transport == "command" or self.command_template:
+            return bool(self.command_template)
         return shutil.which(TERMUX_BINARY) is not None
 
     def capabilities(self):

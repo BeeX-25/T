@@ -191,6 +191,51 @@ class Enigma2SourceTests(unittest.TestCase):
         self.assertIn(":8002/", items[0]["url"])
 
 
+class ChannelListTests(unittest.TestCase):
+    def test_inline_items_become_dialled_channels(self):
+        items = sources.load_channels(
+            {"name": "رسيفري", "items": [{"name": "MBC 1", "number": 103}]}, None
+        )
+        self.assertEqual(items[0]["url"], "macro:key:num1,key:num0,key:num3,key:select")
+        self.assertEqual(items[0]["number"], "103")
+        self.assertEqual(items[0]["kind"], "live")
+
+    def test_confirm_key_can_be_turned_off(self):
+        items = sources.load_channels(
+            {"items": [{"name": "x", "number": 7}], "confirm": ""}, None
+        )
+        self.assertEqual(items[0]["url"], "macro:key:num7")
+
+    def test_csv_files_are_accepted(self):
+        items = sources.load_channels(
+            {"path": "channels.csv"},
+            FakeProvider({"channels.csv": "MBC 1,103,عام\n# note\nالجزيرة,7,أخبار\n"}),
+        )
+        self.assertEqual([item["name"] for item in items], ["MBC 1", "الجزيرة"])
+        self.assertEqual(items[1]["group"], "أخبار")
+
+    def test_json_files_are_accepted(self):
+        items = sources.load_channels(
+            {"path": "channels.json"},
+            FakeProvider({"channels.json": '[{"name": "MBC 1", "number": 103}]'}),
+        )
+        self.assertEqual(items[0]["name"], "MBC 1")
+
+    def test_entries_without_a_number_are_skipped(self):
+        items = sources.load_channels(
+            {"items": [{"name": "بلا رقم"}, {"name": "ok", "number": "5"}]}, None
+        )
+        self.assertEqual([item["name"] for item in items], ["ok"])
+
+    def test_dispatch_and_validation(self):
+        loaded = sources.load_source(
+            {"type": "channels", "items": [{"name": "a", "number": 1}]}, None
+        )
+        self.assertEqual(len(loaded["items"]), 1)
+        with self.assertRaises(ValueError):
+            sources.load_source({"type": "channels"}, None)
+
+
 class DispatchTests(unittest.TestCase):
     def test_m3u_source(self):
         provider = FakeProvider({"list.m3u": "#EXTM3U\n#EXTINF:-1,A\nhttp://a\n"})

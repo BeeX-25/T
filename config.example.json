@@ -35,7 +35,9 @@
       "brand": "samsung",
       "address": null,
       "repeat": 1,
+      "transport": "termux",
       "command": "",
+      "url": "",
       "brands": {
         "my_tv": {
           "protocol": "nec",
@@ -120,6 +122,16 @@
         "live_extension": "ts"
       },
       {
+        "name": "قنوات رسيفري بالأرقام",
+        "type": "channels",
+        "kind": "live",
+        "confirm": "select",
+        "items": [
+          { "name": "MBC 1", "number": 103, "group": "عام" },
+          { "name": "الجزيرة", "number": 7, "group": "أخبار" }
+        ]
+      },
+      {
         "name": "أفلامي المحلية",
         "type": "m3u",
         "kind": "movies",
@@ -133,6 +145,18 @@
       }
     ]
   },
+
+  "macro_delay": 0.35,
+  "macros": [
+    {
+      "name": "مشاهدة الفضائيات",
+      "steps": ["power_on", "wait:2", "source:1", "wait:1", "digits:103"]
+    },
+    {
+      "name": "إطفاء كل شيء",
+      "steps": ["power_off"]
+    }
+  ],
 
   "shortcuts": [
     { "name": "YouTube", "url": "https://www.youtube.com" }

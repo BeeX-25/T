@@ -17,7 +17,7 @@
 | **جوالك فيه بليستر IR** (شاومي/ريدمي/بوكو وكثير من هواوي) | لا شيء إطلاقاً | تحكم كامل بالتلفاز (تشغيل/صوت/قنوات/أزرار) — بدون بث |
 | **تلفازك ذكي أصلاً** (سامسونج/LG) لكن ريموته ضاع أو تريد أتمتته | لا شيء، فقط واي فاي | تحكم كامل عبر الشبكة + تشغيل التطبيقات |
 | **رسيفر Enigma2** (Vu+/Zgemma/Octagon/Dreambox…) | **لا شيء** | الأفضل: تحكم كامل + قنوات الرسيفر + تشغيل أي رابط عليه |
-| **رسيفر عادي بفيرموير مغلق** (ماجيك/نيو ورلد/1506/GX6605S) | لا شيء | تحكم بالأشعة فقط — لا يمكن تثبيت النظام عليه |
+| **رسيفر عادي بفيرموير مغلق** (ماجيك/نيو ورلد/1506/GX6605S) | لا شيء | تحكم بالأشعة + ماكروات + قنوات بالأرقام (بلا تأكيد) |
 | **صندوق أندرويد قديم** موصول أصلاً | لا شيء | تحكم + مكتبة كاملة |
 | لا هذا ولا ذاك | جوال أندرويد مستعمل رخيص | أرخص "صندوق بث" ممكن |
 
@@ -159,6 +159,76 @@ ssh root@192.168.1.30 "sh /tmp/bridge/scripts/install_enigma2.sh"
 | التحكم بها من الجوال | **الأشعة (IR)** — عبر معالج الضبط أدناه |
 | قنوات وأفلام ومسلسلات | خاصية IPTV/Xtream داخل الرسيفر نفسه إن وُجدت، أو جوال على HDMI |
 | مكتبة وبحث وأتمتة حقيقية | شغّل الخدمة على جوال أندرويد موصول بـ HDMI، وابقِ الرسيفر للقنوات الفضائية |
+
+### كيف تجعل جهازاً مغلقاً «قابلاً للبرمجة»؟
+
+لا يمكن جعله قابلاً للبرمجة **من الداخل** — لكن يمكن جعله قابلاً للبرمجة
+**من الخارج**، وهذا ما تفعله كل أنظمة الأتمتة المنزلية مع الأجهزة المغلقة.
+ثلاث درجات، من الأرخص إلى الأقوى:
+
+**الدرجة الأولى: قيادته بأزراره (متاح الآن، بلا أي شراء)**
+
+بعد ضبط أكواد الأشعة، صار كل زر في ريموته دالّة تُستدعى: من سطر الأوامر، أو
+من cron، أو من زر في جوالك. وفوق ذلك أضيفت **الماكروات** — تسلسل أزرار
+بمهلات، وهو ما يحوّل «افعل هذا يدوياً» إلى أمر واحد:
+
+```json
+"macros": [
+  { "name": "مشاهدة الفضائيات",
+    "steps": ["power_on", "wait:2", "source:1", "wait:1", "digits:103"] }
+]
+```
+
+خطوات الماكرو: اسم زر (`up`)، أو `key:<زر>`، أو `wait:<ثوانٍ>`، أو
+`digits:<رقم القناة>` (يُترجم إلى ضغطات الأرقام)، أو أوامر مثل `power_on`
+و`power_off` و`volume:up` و`cast:<رابط>`.
+
+**قائمة قنوات بالأرقام:** أعطِ البرنامج أرقام قنواتك في الرسيفر، فتظهر لك في
+جوالك كشبكة قابلة للبحث، وكل ضغطة تُرسل أرقامها عبر الأشعة:
+
+```json
+{
+  "name": "قنوات رسيفري",
+  "type": "channels",
+  "confirm": "select",
+  "items": [
+    { "name": "MBC 1", "number": 103, "group": "عام" },
+    { "name": "الجزيرة", "number": 7,  "group": "أخبار" }
+  ]
+}
+```
+
+ويمكن وضعها في ملف `csv` بسيط (`الاسم,الرقم,المجموعة`) أو JSON عبر `path`.
+
+> **حدّ صريح:** هذه قيادة «مفتوحة الحلقة» — لا يوجد أي طريق يخبرنا أن الجهاز
+> استجاب فعلاً. لذلك يعرض البرنامج آخر قناة أُرسلت مع كلمة **(بلا تأكيد)**،
+> ولا يدّعي معرفة الحالة الحقيقية. من يريد تأكيداً حقيقياً يحتاج جهازاً
+> يتكلم في الاتجاهين (Enigma2 أو أندرويد).
+
+**الدرجة الثانية: جسر أشعة عبر الواي فاي (بدولارين)**
+
+إن لم يكن في جوالك بليستر — أو أردت أن تعمل الأتمتة والجوال بعيد عن الجهاز —
+فأي ESP8266 مع ليد أشعة يكفي. في `scripts/esp8266_ir_bridge.ino` سكيتش جاهز
+(٦٠ سطراً) يستقبل نفس النبضات ويرسلها:
+
+```json
+"ir": {
+  "enabled": true,
+  "brand": "my_remote",
+  "transport": "http",
+  "url": "http://192.168.1.9/ir?freq={frequency}&pattern={pattern}"
+}
+```
+
+نفس القالب يصلح لأي جهاز إرسال آخر (Tasmota أو ESPHome أو سكربت خاص بك)،
+وكذلك `transport: "command"` لمن عنده LIRC.
+
+**الدرجة الثالثة: استبدال الصندوق (إن أردت برمجة حقيقية)**
+
+رسيفر Enigma2 مستعمل أو صندوق أندرويد رخيص يعطيك ما لا يعطيه أي التفاف على
+جهاز مغلق: قراءة الحالة، ومعرفة القناة الحالية، وتشغيل الروابط، وواجهة
+برمجية حقيقية. القاعدة البسيطة: **الأشعة تكفي للتحكم، ولا تكفي للأتمتة
+الموثوقة.**
 
 ---
 
@@ -311,6 +381,8 @@ python3 -m smarttv --discover                # ابحث عن تلفازات في
 | GET | `/api/ir/candidates` | مجموعات أكواد مرشّحة + الريموت الحالي |
 | POST | `/api/ir/test` · `/api/ir/save` | جرّب مجموعة / اعتمدها واحفظها |
 | POST | `/api/ir/import` | استيراد `lircd.conf` أو irdb CSV |
+| GET | `/api/macros` | الماكروات المعرّفة |
+| POST | `/api/macro` | `{"name": …}` أو `{"steps": [...]}` |
 | POST/DELETE | `/api/sleep` | مؤقّت النوم |
 
 الردّ دائماً `{"ok": true, "data": …}` أو `{"ok": false, "error": "…"}`.
@@ -372,6 +444,7 @@ smarttv/
   store.py        المفضلة ومواضع المتابعة والسجل (كتابة ذرّية)
   ircodes.py      توليد نبضات NEC / Samsung32 / SIRC / RC5 والمرشّحين
   irimport.py     استيراد أكواد الريموتات من LIRC و irdb
+  macros.py       تسلسلات أزرار بمهلات: برمجة الأجهزة التي لا ترد
   automation.py   cron مصغّر + مؤقّت النوم
   keys.py         خريطة أزرار موحّدة بين كل الواجهات
   web/            صفحة الريموت والمكتبة (PWA بالعربية)
@@ -383,7 +456,7 @@ smarttv/
 python3 -m unittest discover
 ```
 
-٢٤٢ اختباراً تعمل بلا تلفاز وبلا رسيفر وبلا إنترنت وبلا أي مكتبة خارجية:
+٢٧٥ اختباراً تعمل بلا تلفاز وبلا رسيفر وبلا إنترنت وبلا أي مكتبة خارجية:
 توليد نبضات الأشعة واستيراد ملفات LIRC/irdb، تحليل مخرجات `cec-client`،
 أوامر OpenWebif ومراجع الخدمة، واجهة Xtream، قوائم M3U ودليل XMLTV، منطق
 اختيار الواجهات، تعابير cron، بناء نوايا أندرويد، حماية المسارات والرمز
@@ -403,7 +476,12 @@ from a phone's IR blaster (NEC / Samsung32 / SIRC / RC5 encoders included),
 or over Wi-Fi to Samsung Tizen and LG webOS sets. Remotes nobody has a
 table for - the cheap Sunplus 1506 / GX6605S receivers, say, which cannot
 run anything themselves - are handled by a trial wizard over candidate
-code sets, or by importing a `lircd.conf` or irdb CSV. Playback runs through
+code sets, or by importing a `lircd.conf` or irdb CSV. Such a box is made
+programmable from the outside: macros (key sequences with pauses) and
+numbered channel lists turn "dial 1-0-3 on the remote" into one API call,
+and the service says plainly when a command is open-loop. Pulses go out
+through the phone's blaster, an `irsend` command, or an ESP8266 Wi-Fi
+bridge (sketch included). Playback runs through
 **mpv** on Linux or through **VLC/YouTube intents** on an Android phone in
 Termux, which - plugged into HDMI - is the cheapest media box there is. A
 library layer reads your own **M3U playlists, XMLTV guides, Xtream Codes

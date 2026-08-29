@@ -9,6 +9,7 @@ from . import discovery, irimport, keys as keymap
 from .automation import Scheduler
 from .backends.base import TVError
 from .catalog import Catalog
+from .macros import MacroError, MacroRunner
 from .players import PlayerError, create_player
 from .registry import Registry
 from .store import Store
@@ -28,6 +29,9 @@ class Api:
         self.player = create_player(self._player_config(config))
         self.store = Store(config.get("state_file", "~/.smarttv/state.json"))
         self.catalog = Catalog(config.get("catalog", {}), logger=self.logger)
+        self.macros = MacroRunner(
+            self._actions(), default_delay=config.get("macro_delay", 0.35)
+        )
         self.current = None
         self._last_resume_write = 0
         self._restore_ir_profile()
@@ -58,6 +62,8 @@ class Api:
             ("POST", "/api/favorites"): self.toggle_favorite,
             ("GET", "/api/resume"): self.list_resume,
             ("GET", "/api/episodes"): self.list_episodes,
+            ("GET", "/api/macros"): self.list_macros,
+            ("POST", "/api/macro"): self.run_macro,
             ("GET", "/api/ir/candidates"): self.ir_candidates,
             ("POST", "/api/ir/test"): self.ir_test,
             ("POST", "/api/ir/save"): self.ir_save,
@@ -197,6 +203,7 @@ class Api:
                 "capabilities": sorted(self.player.capabilities()),
             },
             "catalog": self.catalog.status(),
+            "macros": [macro.get("name") for macro in self.config.get("macros", [])],
         }
 
     def discover(self, payload):
@@ -266,10 +273,6 @@ class Api:
                 self.registry.call("power_on")
             except TVError as exc:
                 self.logger("cast: could not power on the TV: %s" % exc)
-        self._save_position()
-        start = None
-        if payload.get("resume", True):
-            start = self.store.resume_position(url)
         item = {
             "url": url,
             "name": payload.get("name") or url,
@@ -277,11 +280,60 @@ class Api:
             "logo": payload.get("logo", ""),
             "group": payload.get("group", ""),
         }
+        if str(url).startswith("macro:"):
+            # A channel on a remote-only device: dial it, and be honest
+            # that nothing confirms it worked.
+            try:
+                result = self.macros.run(str(url)[len("macro:"):])
+            except MacroError as exc:
+                raise ApiError(str(exc)) from exc
+            self.current = dict(item, confirmed=False)
+            self.store.add_history(item)
+            return dict(result, url=url, name=item["name"])
+        self._save_position()
+        start = None
+        if payload.get("resume", True):
+            start = self.store.resume_position(url)
         result = self.player.play(url, append=bool(payload.get("append")), start=start)
         self.current = item
         self.store.add_history(item)
         if start:
             result["resumed_at"] = start
+        return result
+
+    # -- macros -----------------------------------------------------------
+    def _find_macro(self, name):
+        for macro in self.config.get("macros", []):
+            if macro.get("name") == name:
+                return macro
+        return None
+
+    def list_macros(self, payload):
+        return {
+            "macros": [
+                {"name": macro.get("name"), "steps": macro.get("steps")}
+                for macro in self.config.get("macros", [])
+            ]
+        }
+
+    def run_macro(self, payload):
+        """Run a named macro, or an ad-hoc sequence of steps."""
+        steps = payload.get("steps")
+        if payload.get("name"):
+            macro = self._find_macro(payload["name"])
+            if macro is None:
+                raise ApiError("no macro called %r" % payload["name"], status=404)
+            steps = macro.get("steps")
+            delay = macro.get("delay", payload.get("delay"))
+        else:
+            delay = payload.get("delay")
+        if not steps:
+            raise ApiError("send a macro name or a list of steps")
+        try:
+            result = self.macros.run(steps, delay=delay)
+        except MacroError as exc:
+            raise ApiError(str(exc)) from exc
+        result["name"] = payload.get("name")
         return result
 
     # -- infrared setup wizard --------------------------------------------

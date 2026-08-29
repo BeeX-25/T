@@ -54,7 +54,12 @@ DEFAULTS = {
             "brand": "samsung",
             "address": None,
             "repeat": 1,
+            # transport: termux (phone blaster) | command (e.g. irsend) | http
+            "transport": "termux",
             "command": "",
+            "url": "",
+            "method": "GET",
+            "body": "",
             "brands": {},
         },
         "samsung": {
@@ -112,6 +117,10 @@ DEFAULTS = {
         "cache_dir": "~/.smarttv/cache",
         "timeout": 20,
     },
+    # Named key sequences, for devices that can only be driven by their
+    # own remote: {"name": .., "steps": ["power_on", "wait:2", "digits:105"]}
+    "macros": [],
+    "macro_delay": 0.35,
     "shortcuts": [
         {"name": "YouTube", "url": "https://www.youtube.com"},
     ],
